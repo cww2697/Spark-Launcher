@@ -16,6 +16,10 @@ data class AppConfig(
     val eaPath: String = "",
     val battleNetPath: String = "",
     val ubisoftPath: String = "",
+    val igdbClientId: String = "",
+    val igdbClientSecret: String = "",
+    val windowWidth: Int = 0,
+    val windowHeight: Int = 0,
 )
 
 object ConfigManager {
@@ -72,7 +76,6 @@ object ConfigManager {
     }
 
     private fun toJson(config: AppConfig): String {
-        // Minimal JSON; no external libs required; include new optional fields
         fun esc(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
         return buildString {
             append("{\n")
@@ -80,7 +83,11 @@ object ConfigManager {
             append("\n  \"steamPath\": \"").append(esc(config.steamPath)).append("\",")
             append("\n  \"eaPath\": \"").append(esc(config.eaPath)).append("\",")
             append("\n  \"battleNetPath\": \"").append(esc(config.battleNetPath)).append("\",")
-            append("\n  \"ubisoftPath\": \"").append(esc(config.ubisoftPath)).append("\"\n")
+            append("\n  \"ubisoftPath\": \"").append(esc(config.ubisoftPath)).append("\",")
+            append("\n  \"igdbClientId\": \"").append(esc(config.igdbClientId)).append("\",")
+            append("\n  \"igdbClientSecret\": \"").append(esc(config.igdbClientSecret)).append("\",")
+            append("\n  \"windowWidth\": ").append(config.windowWidth).append(",")
+            append("\n  \"windowHeight\": ").append(config.windowHeight).append("\n")
             append("}")
         }
     }
@@ -105,12 +112,25 @@ object ConfigManager {
         val eaRaw = extractRaw("eaPath")
         val bnetRaw = extractRaw("battleNetPath")
         val ubiRaw = extractRaw("ubisoftPath")
+        val igdbIdRaw = extractRaw("igdbClientId")
+        val igdbSecretRaw = extractRaw("igdbClientSecret")
+        fun extractInt(key: String): Int {
+            val r = Regex("\"$key\"\\s*:\\s*(-?\\d+)")
+            return r.find(json)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        }
+
+        val winW = extractInt("windowWidth")
+        val winH = extractInt("windowHeight")
         return AppConfig(
             theme = unesc(themeRaw),
             steamPath = unesc(steamRaw),
             eaPath = unesc(eaRaw),
             battleNetPath = unesc(bnetRaw),
             ubisoftPath = unesc(ubiRaw),
+            igdbClientId = unesc(igdbIdRaw),
+            igdbClientSecret = unesc(igdbSecretRaw),
+            windowWidth = winW,
+            windowHeight = winH,
         )
     }
 }

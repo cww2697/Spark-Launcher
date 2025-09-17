@@ -21,6 +21,8 @@ import javax.swing.JFileChooser
 fun SettingsWindow(
     isOpen: Boolean,
     onCloseRequest: () -> Unit,
+    onReloadLibraries: () -> Unit,
+    onRebuildCaches: () -> Unit,
 ) {
     if (isOpen) {
         Window(
@@ -37,6 +39,8 @@ fun SettingsWindow(
             var eaPath by remember { mutableStateOf(currentConfig.eaPath) }
             var battleNetPath by remember { mutableStateOf(currentConfig.battleNetPath) }
             var ubisoftPath by remember { mutableStateOf(currentConfig.ubisoftPath) }
+            var igdbClientId by remember { mutableStateOf(currentConfig.igdbClientId) }
+            var igdbClientSecret by remember { mutableStateOf(currentConfig.igdbClientSecret) }
 
             // Available themes (currently only Default)
             val themes = remember { listOf("Default") }
@@ -72,6 +76,10 @@ fun SettingsWindow(
                                         eaPath = eaPath,
                                         battleNetPath = battleNetPath,
                                         ubisoftPath = ubisoftPath,
+                                        igdbClientId = igdbClientId,
+                                        igdbClientSecret = igdbClientSecret,
+                                        windowWidth = currentConfig.windowWidth,
+                                        windowHeight = currentConfig.windowHeight,
                                     )
                                     ConfigManager.save(newConfig)
                                     onCloseRequest()
@@ -142,6 +150,37 @@ fun SettingsWindow(
 
                                     Spacer(Modifier.height(24.dp))
 
+                                    // Integrations Section
+                                    Text(
+                                        text = "Integrations",
+                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    SectionCard {
+                                        Column(
+                                            Modifier.fillMaxWidth().padding(16.dp),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            OutlinedTextField(
+                                                value = igdbClientId,
+                                                onValueChange = { igdbClientId = it },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                label = { Text("IGDB Client ID") },
+                                                singleLine = true
+                                            )
+                                            OutlinedTextField(
+                                                value = igdbClientSecret,
+                                                onValueChange = { igdbClientSecret = it },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                label = { Text("IGDB Client Secret") },
+                                                singleLine = true
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(24.dp))
+
                                     // Libraries Section
                                     Text(
                                         text = "Libraries",
@@ -183,7 +222,7 @@ fun SettingsWindow(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Button(
-                                                    onClick = { /* no-op for now */ },
+                                                    onClick = { onReloadLibraries() },
                                                     modifier = Modifier.height(40.dp),
                                                     contentPadding = PaddingValues(horizontal = 12.dp),
                                                     colors = ButtonDefaults.buttonColors(
@@ -194,6 +233,20 @@ fun SettingsWindow(
                                                     Text("↻")
                                                     Spacer(Modifier.width(8.dp))
                                                     Text("Reload Libraries")
+                                                }
+                                                Spacer(Modifier.width(12.dp))
+                                                Button(
+                                                    onClick = { onRebuildCaches() },
+                                                    modifier = Modifier.height(40.dp),
+                                                    contentPadding = PaddingValues(horizontal = 12.dp),
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                ) {
+                                                    Text("⟲")
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Text("Rebuild Caches")
                                                 }
                                             }
                                         }
