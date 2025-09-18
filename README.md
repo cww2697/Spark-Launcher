@@ -73,7 +73,7 @@ IGDB uses Twitch authentication. To get credentials:
 
 ### Clone
 
-- git clone https://github.com/your-org-or-user/SparkLauncher.git
+- git clone https://github.com/cww2697/Spark-Launcher.git
 - cd SparkLauncher
 
 ### Run (development)
