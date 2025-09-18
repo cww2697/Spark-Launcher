@@ -1,4 +1,4 @@
-# SparkLauncher
+# Spark Launcher
 
 [![Automatic Dependency Submission](https://github.com/cww2697/Spark-Launcher/actions/workflows/dependency-graph/auto-submission/badge.svg)](https://github.com/cww2697/Spark-Launcher/actions/workflows/dependency-graph/auto-submission)
 
