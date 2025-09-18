@@ -45,8 +45,13 @@ object ConfigManager {
     private const val APP_FOLDER = "SparkLauncher"
     private const val CONFIG_FILE_NAME = "config.json"
 
+    // Test hook to override base directory in unit tests
+    @Volatile
+    internal var appDataDirOverride: Path? = null
+
     /** Returns path to %APPDATA%/SparkLauncher on Windows. */
     private fun getAppDataDir(): Path {
+        appDataDirOverride?.let { return it.resolve(APP_FOLDER) }
         val appDataEnv = System.getenv("APPDATA")
         val base =
             if (!appDataEnv.isNullOrBlank()) Paths.get(appDataEnv) else Paths.get(System.getProperty("user.home"))

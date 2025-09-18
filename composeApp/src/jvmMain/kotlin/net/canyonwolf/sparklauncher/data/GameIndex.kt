@@ -27,7 +27,12 @@ object GameIndexManager {
     private const val APP_FOLDER = "SparkLauncher"
     private const val INDEX_FILE_NAME = "game_index.json"
 
+    // Test hook to override base directory in unit tests
+    @Volatile
+    internal var appDataDirOverride: Path? = null
+
     private fun getAppDataDir(): Path {
+        appDataDirOverride?.let { return it.resolve(APP_FOLDER) }
         val appDataEnv = System.getenv("APPDATA")
         val base =
             if (!appDataEnv.isNullOrBlank()) Paths.get(appDataEnv) else Paths.get(System.getProperty("user.home"))
