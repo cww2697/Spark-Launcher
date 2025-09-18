@@ -1,0 +1,83 @@
+name: Feature request
+description: Suggest an idea or improvement for Spark Launcher.
+title: "[Feature]: "
+labels: [ "enhancement" ]
+assignees: [ ]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Spark Launcher! Please provide as much detail as you can so we can understand the problem and design a great solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem/Goal
+      description: What problem are you trying to solve? What is the goal or user need?
+      placeholder: |
+        Example:
+        It's hard to tell which games are newly added. I'd like a "Recently Added" section on the Home screen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the feature you’d like to see and how it should work.
+      placeholder: |
+        Example:
+        Add a carousel labeled "Recently Added" that shows games added in the last 30 days, ordered by date added.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you considered alternative approaches or workarounds?
+      placeholder: |
+        Example:
+        Instead of a new carousel, add a sort option on the Library page for "Date Added".
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Mockups / Screenshots
+      description: Attach sketches, mockups, or screenshots that help illustrate the idea.
+      placeholder: You can paste images or drop files here.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Low
+        - Medium
+        - High
+        - Critical
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: App version (if known)
+      description: The version you are using when you thought of this feature. If unsure, leave blank.
+      placeholder: e.g., 1.1.1
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Any other information that would help us evaluate the request.
+    validations:
+      required: false

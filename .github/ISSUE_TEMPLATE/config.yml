@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Support
+    url: https://github.com/cww2697/Spark-Launcher/discussions
+    about: For Q&A, troubleshooting, and general support, please open a Discussion.
+  - name: Documentation (README)
+    url: https://github.com/cww2697/Spark-Launcher#readme
+    about: Review the README for setup, usage, and build instructions before filing an issue.

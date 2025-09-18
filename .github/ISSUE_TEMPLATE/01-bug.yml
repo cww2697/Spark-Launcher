@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a problem or unexpected behavior in Spark Launcher.
+title: "[Bug]: "
+labels: [ "bug", "triage" ]
+assignees: [ ]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the sections below to help us reproduce and fix the issue faster.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is, including what you expected to happen.
+      placeholder: |
+        Example:
+        When I click the Reload Libraries button in Settings, the app freezes for ~10 seconds and then crashes.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Step-by-step instructions that explain how to reproduce the issue.
+      placeholder: |
+        1. Open Settings
+        2. Click "Libraries" section
+        3. Press "Reload Libraries"
+        4. Observe the app behavior
+      render: bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / Screen recordings
+      description: Drag and drop images or attach a short video to illustrate the issue.
+      placeholder: You can paste images or drop files here.
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: App version (if known)
+      description: The Spark Launcher version where you observed the issue. If unsure, leave blank.
+      placeholder: e.g., 1.1.1
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Any other details that might be helpful (logs, OS info, launcher paths, etc.).
+    validations:
+      required: false
