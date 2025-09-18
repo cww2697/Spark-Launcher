@@ -39,6 +39,7 @@ object BoxArtFetcher {
     // Persistent metadata cache files per launcher under caches/
     private const val APP_FOLDER = "SparkLauncher"
     private const val CACHES_FOLDER = "caches"
+    private const val IMAGES_FOLDER = "images"
     private const val METADATA_FILE_PREFIX = "igdb_metadata_"
     private const val METADATA_FILE_SUFFIX = ".json"
     @Volatile
@@ -49,6 +50,10 @@ object BoxArtFetcher {
     private val _metadataLoading = kotlinx.coroutines.flow.MutableStateFlow(false)
     val metadataLoading: kotlinx.coroutines.flow.StateFlow<Boolean> = _metadataLoading
 
+    // Expose image prefetching state to allow UI to wait until images are ready on initial launch
+    private val _imagesPrefetching = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val imagesPrefetching: kotlinx.coroutines.flow.StateFlow<Boolean> = _imagesPrefetching
+
     // OAuth token cache
     @Volatile
     private var cachedToken: String? = null
@@ -57,9 +62,37 @@ object BoxArtFetcher {
 
     fun getBoxArt(gameName: String): ImageBitmap? {
         if (gameName.isBlank()) return null
+        // 1) In-memory cache
+        imageCache[gameName]?.let { return it }
+        // 2) Disk cache under caches/images using hash of gameName
+        val file = getImageFilePath(gameName)
+        try {
+            if (Files.exists(file)) {
+                val bytes = Files.readAllBytes(file)
+                if (bytes.isNotEmpty()) {
+                    val img: BufferedImage? = ImageIO.read(bytes.inputStream())
+                    if (img != null) {
+                        val bmp = img.toComposeImageBitmap()
+                        imageCache[gameName] = bmp
+                        return bmp
+                    }
+                }
+            }
+        } catch (_: Throwable) { /* ignore and continue to network */
+        }
+        // 3) Network fetch via IGDB and persist to disk
         return imageCache.computeIfAbsent(gameName) {
             val url = findImageUrl(gameName) ?: return@computeIfAbsent null
-            downloadImage(url)
+            val bytes = downloadImageBytes(url) ?: return@computeIfAbsent null
+            try {
+                // Ensure directories exist before writing
+                val dir = file.parent
+                if (!Files.exists(dir)) Files.createDirectories(dir)
+                Files.write(file, bytes)
+            } catch (_: Throwable) { /* best-effort; ignore write errors */
+            }
+            val img: BufferedImage = ImageIO.read(bytes.inputStream()) ?: return@computeIfAbsent null
+            img.toComposeImageBitmap()
         }
     }
 
@@ -71,7 +104,18 @@ object BoxArtFetcher {
 
     /** Prefetch and cache images for a collection of game names. */
     fun prefetchAll(names: Collection<String>) {
-        names.forEach { prefetch(it) }
+        if (names.isEmpty()) return
+        _imagesPrefetching.value = true
+        try {
+            // De-duplicate and run sequentially to avoid IGDB rate-limits on cold start
+            names.asSequence()
+                .filter { it.isNotBlank() }
+                .map { it.trim() }
+                .distinct()
+                .forEach { prefetch(it) }
+        } finally {
+            _imagesPrefetching.value = false
+        }
     }
 
     fun getGameInfo(launcher: net.canyonwolf.sparklauncher.data.LauncherType, gameName: String): GameInfo? {
@@ -144,6 +188,19 @@ object BoxArtFetcher {
     }
 
     private fun getCachesDir(): Path = getAppDataDir().resolve(CACHES_FOLDER)
+    private fun getImagesDir(): Path = getCachesDir().resolve(IMAGES_FOLDER)
+    private fun sha1Hex(s: String): String {
+        return try {
+            val md = java.security.MessageDigest.getInstance("SHA-1")
+            val bytes = md.digest(s.toByteArray(StandardCharsets.UTF_8))
+            bytes.joinToString(separator = "") { b -> String.format("%02x", b) }
+        } catch (_: Throwable) {
+            s.hashCode().toUInt().toString(16)
+        }
+    }
+
+    private fun getImageFilePath(gameName: String): Path =
+        getImagesDir().resolve("art_" + sha1Hex(gameName.lowercase()) + ".jpg")
     private fun getMetadataFilePath(launcher: net.canyonwolf.sparklauncher.data.LauncherType): Path =
         getCachesDir().resolve(METADATA_FILE_PREFIX + launcher.name.lowercase() + METADATA_FILE_SUFFIX)
 
@@ -520,7 +577,7 @@ object BoxArtFetcher {
         }
     }
 
-    private fun downloadImage(urlStr: String): ImageBitmap? {
+    private fun downloadImageBytes(urlStr: String): ByteArray? {
         return try {
             val conn = URL(urlStr).openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
@@ -530,10 +587,18 @@ object BoxArtFetcher {
             conn.instanceFollowRedirects = true
             conn.inputStream.use { input ->
                 val bytes = input.readAllBytesCompat()
-                if (bytes.isEmpty()) return null
-                val img: BufferedImage = ImageIO.read(bytes.inputStream()) ?: return null
-                img.toComposeImageBitmap()
+                if (bytes.isEmpty()) null else bytes
             }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun downloadImage(urlStr: String): ImageBitmap? {
+        val bytes = downloadImageBytes(urlStr) ?: return null
+        return try {
+            val img: BufferedImage = ImageIO.read(bytes.inputStream()) ?: return null
+            img.toComposeImageBitmap()
         } catch (_: Throwable) {
             null
         }

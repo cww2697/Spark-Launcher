@@ -32,7 +32,7 @@ kotlin {
     }
 }
 
-version = "1.1.1"
+version = "1.1.2"
 
 tasks.withType(Jar::class.java).configureEach {
     manifest {
