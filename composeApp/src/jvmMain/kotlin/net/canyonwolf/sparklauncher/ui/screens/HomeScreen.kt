@@ -96,6 +96,7 @@ fun HomeScreen(
 ) {
     // Observe metadata loading to recompute groups when rebuild finishes
     val metadataLoading by BoxArtFetcher.metadataLoading.collectAsState()
+    val imagesPrefetching by BoxArtFetcher.imagesPrefetching.collectAsState()
     // Group entries by genre using cached IGDB metadata (no network). Fallback to "Uncategorized".
     val genreGroups: Map<String, List<GameEntry>> = remember(entries, metadataLoading) {
         val map = linkedMapOf<String, MutableList<GameEntry>>()
@@ -120,12 +121,12 @@ fun HomeScreen(
     }
     val genreOrder = remember(genreGroups) { genreGroups.keys.sorted() }
 
-    if (metadataLoading && entries.isNotEmpty()) {
+    if ((metadataLoading || imagesPrefetching) && entries.isNotEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator()
                 Spacer(Modifier.height(12.dp))
-                Text("Loading game metadata…", color = MaterialTheme.colorScheme.onBackground)
+                Text("Preparing your home screen…", color = MaterialTheme.colorScheme.onBackground)
             }
         }
     } else {
@@ -312,8 +313,9 @@ private fun CarouselSection(title: String, items: List<GameEntry>, onOpenGame: (
 
 @Composable
 private fun GameCarouselCard(entry: GameEntry, onClick: () -> Unit) {
-    // Load box art asynchronously using cached fetcher
+    // Load box art asynchronously using cached fetcher; fallback to system icon if not found
     var image by remember(entry) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var iconBitmap by remember(entry.exePath) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     LaunchedEffect(entry) {
         val queryName = entry.name.let { n ->
             val normalized = n.lowercase().trim().replace(Regex("\\s+"), " ")
@@ -321,6 +323,12 @@ private fun GameCarouselCard(entry: GameEntry, onClick: () -> Unit) {
         }
         image = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             BoxArtFetcher.getBoxArt(queryName)
+        }
+        if (image == null) {
+            // Fetch application icon on IO dispatcher like in Library list
+            iconBitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                net.canyonwolf.sparklauncher.ui.util.SystemIconLoader.getIcon(entry.exePath)
+            }
         }
     }
 
@@ -336,16 +344,29 @@ private fun GameCarouselCard(entry: GameEntry, onClick: () -> Unit) {
             .clickable(onClick = onClick)
     ) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)) {
-            if (image != null) {
-                Image(
-                    bitmap = image!!,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                // Subtle placeholder
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
+            when {
+                image != null -> {
+                    Image(
+                        bitmap = image!!,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                iconBitmap != null -> {
+                    // Center the app icon as a fallback
+                    Image(
+                        bitmap = iconBitmap!!,
+                        contentDescription = null,
+                        modifier = Modifier.align(Alignment.Center).size(72.dp)
+                    )
+                }
+
+                else -> {
+                    // Subtle placeholder
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
+                }
             }
 
             // Title gradient overlay at bottom
