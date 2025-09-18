@@ -201,11 +201,12 @@ object BoxArtFetcher {
 
     private fun hasConfiguredPath(launcher: net.canyonwolf.sparklauncher.data.LauncherType): Boolean {
         val cfg = ConfigManager.loadOrCreateDefault()
+        fun any(list: List<String>, legacy: String) = list.any { it.isNotBlank() } || legacy.isNotBlank()
         return when (launcher) {
-            net.canyonwolf.sparklauncher.data.LauncherType.STEAM -> cfg.steamPath.isNotBlank()
-            net.canyonwolf.sparklauncher.data.LauncherType.EA -> cfg.eaPath.isNotBlank()
-            net.canyonwolf.sparklauncher.data.LauncherType.BATTLENET -> cfg.battleNetPath.isNotBlank()
-            net.canyonwolf.sparklauncher.data.LauncherType.UBISOFT -> cfg.ubisoftPath.isNotBlank()
+            net.canyonwolf.sparklauncher.data.LauncherType.STEAM -> any(cfg.steamLibraries, cfg.steamPath)
+            net.canyonwolf.sparklauncher.data.LauncherType.EA -> any(cfg.eaLibraries, cfg.eaPath)
+            net.canyonwolf.sparklauncher.data.LauncherType.BATTLENET -> any(cfg.battleNetLibraries, cfg.battleNetPath)
+            net.canyonwolf.sparklauncher.data.LauncherType.UBISOFT -> any(cfg.ubisoftLibraries, cfg.ubisoftPath)
         }
     }
 

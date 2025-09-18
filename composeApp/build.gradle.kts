@@ -1,3 +1,4 @@
+import org.gradle.jvm.tasks.Jar
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
@@ -31,6 +32,20 @@ kotlin {
     }
 }
 
+// Single source of truth for app version
+version = "1.1.0"
+
+// Ensure the JAR manifest carries the version so the app can read it at runtime
+tasks.withType(Jar::class.java).configureEach {
+    manifest {
+        attributes(
+            mapOf(
+                "Implementation-Version" to project.version.toString(),
+                "Implementation-Title" to "Spark Launcher"
+            )
+        )
+    }
+}
 
 compose.desktop {
     application {
@@ -38,8 +53,8 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "net.canyonwolf.sparklauncher"
-            packageVersion = "1.0.0"
+            packageName = "Spark Launcher"
+            packageVersion = project.version.toString()
         }
     }
 }

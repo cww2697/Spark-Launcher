@@ -27,7 +27,12 @@ object GameIndexManager {
     private const val APP_FOLDER = "SparkLauncher"
     private const val INDEX_FILE_NAME = "game_index.json"
 
+    // Test hook to override base directory in unit tests
+    @Volatile
+    internal var appDataDirOverride: Path? = null
+
     private fun getAppDataDir(): Path {
+        appDataDirOverride?.let { return it.resolve(APP_FOLDER) }
         val appDataEnv = System.getenv("APPDATA")
         val base =
             if (!appDataEnv.isNullOrBlank()) Paths.get(appDataEnv) else Paths.get(System.getProperty("user.home"))
@@ -117,44 +122,61 @@ object GameIndexManager {
             }
         }
 
-        val steamPath = config.steamPath.takeIf { it.isNotBlank() }?.let { Paths.get(it) }
-        val eaBase = config.eaPath.takeIf { it.isNotBlank() }?.let { Paths.get(it) }
-        val bnetBase = config.battleNetPath.takeIf { it.isNotBlank() }?.let { Paths.get(it) }
-        val ubiBase = config.ubisoftPath.takeIf { it.isNotBlank() }?.let { Paths.get(it) }
+        // Build lists from new fields with legacy fallback
+        val steamBases =
+            (if (config.steamLibraries.isNotEmpty()) config.steamLibraries else listOfNotNull(config.steamPath.takeIf { it.isNotBlank() }))
+                .mapNotNull { it.takeIf { it.isNotBlank() }?.let { Paths.get(it) } }
+        val eaBases =
+            (if (config.eaLibraries.isNotEmpty()) config.eaLibraries else listOfNotNull(config.eaPath.takeIf { it.isNotBlank() }))
+                .mapNotNull { it.takeIf { it.isNotBlank() }?.let { Paths.get(it) } }
+        val bnetBases =
+            (if (config.battleNetLibraries.isNotEmpty()) config.battleNetLibraries else listOfNotNull(config.battleNetPath.takeIf { it.isNotBlank() }))
+                .mapNotNull { it.takeIf { it.isNotBlank() }?.let { Paths.get(it) } }
+        val ubiBases =
+            (if (config.ubisoftLibraries.isNotEmpty()) config.ubisoftLibraries else listOfNotNull(config.ubisoftPath.takeIf { it.isNotBlank() }))
+                .mapNotNull { it.takeIf { it.isNotBlank() }?.let { Paths.get(it) } }
 
-        addFromBase(steamPath, LauncherType.STEAM, restrictToSteamCommon = true)
+        steamBases.forEach { base ->
+            addFromBase(base, LauncherType.STEAM, restrictToSteamCommon = true)
+        }
 
         // EA: common subfolders are "EA Games" or legacy "Origin Games" under the selected base
-        val eaPath = eaBase?.let { base ->
-            val eaGames = base.resolve("EA Games")
-            val originGames = base.resolve("Origin Games")
-            when {
-                Files.exists(eaGames) -> eaGames
-                Files.exists(originGames) -> originGames
-                else -> base
+        eaBases.forEach { base ->
+            val eaPath = run {
+                val eaGames = base.resolve("EA Games")
+                val originGames = base.resolve("Origin Games")
+                when {
+                    Files.exists(eaGames) -> eaGames
+                    Files.exists(originGames) -> originGames
+                    else -> base
+                }
             }
+            addFromBase(eaPath, LauncherType.EA)
         }
-        addFromBase(eaPath, LauncherType.EA)
 
         // Battle.net games are stored under a "Battle.net" subfolder: <base>/Battle.net/{game}
         // If the user points to the parent folder, scan the Battle.net subfolder if it exists; otherwise scan the base.
-        val bnetPath = bnetBase?.let { base ->
-            val sub = base.resolve("Battle.net")
-            if (Files.exists(sub)) sub else base
+        bnetBases.forEach { base ->
+            val bnetPath = run {
+                val sub = base.resolve("Battle.net")
+                if (Files.exists(sub)) sub else base
+            }
+            addFromBase(bnetPath, LauncherType.BATTLENET)
         }
-        addFromBase(bnetPath, LauncherType.BATTLENET)
 
         // Ubisoft: common layout is "Ubisoft Game Launcher/games" under the selected base
-        val ubiPath = ubiBase?.let { base ->
-            val uplayGames = base.resolve("Ubisoft Game Launcher").resolve("games")
-            val games = base.resolve("games")
-            when {
-                Files.exists(uplayGames) -> uplayGames
-                Files.exists(games) -> games
-                else -> base
+        ubiBases.forEach { base ->
+            val ubiPath = run {
+                val uplayGames = base.resolve("Ubisoft Game Launcher").resolve("games")
+                val games = base.resolve("games")
+                when {
+                    Files.exists(uplayGames) -> uplayGames
+                    Files.exists(games) -> games
+                    else -> base
+                }
             }
+            addFromBase(ubiPath, LauncherType.UBISOFT)
         }
-        addFromBase(ubiPath, LauncherType.UBISOFT)
 
         // Sort entries by launcher then name for consistency
         val sorted = result.sortedWith(compareBy<GameEntry> { it.launcher.name }.thenBy { it.name.lowercase() })

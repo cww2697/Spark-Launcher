@@ -12,10 +12,16 @@ import java.nio.file.Paths
  */
 data class AppConfig(
     val theme: String = "Default",
+    // Legacy single-path fields (kept for backward compatibility)
     val steamPath: String = "",
     val eaPath: String = "",
     val battleNetPath: String = "",
     val ubisoftPath: String = "",
+    // New multi-library support (up to 5 per platform)
+    val steamLibraries: List<String> = emptyList(),
+    val eaLibraries: List<String> = emptyList(),
+    val battleNetLibraries: List<String> = emptyList(),
+    val ubisoftLibraries: List<String> = emptyList(),
     val igdbClientId: String = "",
     val igdbClientSecret: String = "",
     val windowWidth: Int = 0,
@@ -24,18 +30,28 @@ data class AppConfig(
 
 object ConfigManager {
     fun isEmpty(cfg: AppConfig): Boolean {
+        fun allBlank(list: List<String>) = list.all { it.isBlank() }
         return cfg.steamPath.isBlank() &&
                 cfg.eaPath.isBlank() &&
                 cfg.battleNetPath.isBlank() &&
                 cfg.ubisoftPath.isBlank() &&
+                allBlank(cfg.steamLibraries) &&
+                allBlank(cfg.eaLibraries) &&
+                allBlank(cfg.battleNetLibraries) &&
+                allBlank(cfg.ubisoftLibraries) &&
                 cfg.igdbClientId.isBlank() &&
                 cfg.igdbClientSecret.isBlank()
     }
     private const val APP_FOLDER = "SparkLauncher"
     private const val CONFIG_FILE_NAME = "config.json"
 
+    // Test hook to override base directory in unit tests
+    @Volatile
+    internal var appDataDirOverride: Path? = null
+
     /** Returns path to %APPDATA%/SparkLauncher on Windows. */
     private fun getAppDataDir(): Path {
+        appDataDirOverride?.let { return it.resolve(APP_FOLDER) }
         val appDataEnv = System.getenv("APPDATA")
         val base =
             if (!appDataEnv.isNullOrBlank()) Paths.get(appDataEnv) else Paths.get(System.getProperty("user.home"))
@@ -85,6 +101,7 @@ object ConfigManager {
 
     private fun toJson(config: AppConfig): String {
         fun esc(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
+        fun arr(values: List<String>) = values.joinToString(prefix = "[", postfix = "]") { "\"" + esc(it) + "\"" }
         return buildString {
             append("{\n")
             append("  \"theme\": \"").append(esc(config.theme)).append("\",")
@@ -92,6 +109,10 @@ object ConfigManager {
             append("\n  \"eaPath\": \"").append(esc(config.eaPath)).append("\",")
             append("\n  \"battleNetPath\": \"").append(esc(config.battleNetPath)).append("\",")
             append("\n  \"ubisoftPath\": \"").append(esc(config.ubisoftPath)).append("\",")
+            append("\n  \"steamLibraries\": ").append(arr(config.steamLibraries)).append(",")
+            append("\n  \"eaLibraries\": ").append(arr(config.eaLibraries)).append(",")
+            append("\n  \"battleNetLibraries\": ").append(arr(config.battleNetLibraries)).append(",")
+            append("\n  \"ubisoftLibraries\": ").append(arr(config.ubisoftLibraries)).append(",")
             append("\n  \"igdbClientId\": \"").append(esc(config.igdbClientId)).append("\",")
             append("\n  \"igdbClientSecret\": \"").append(esc(config.igdbClientSecret)).append("\",")
             append("\n  \"windowWidth\": ").append(config.windowWidth).append(",")
@@ -113,6 +134,12 @@ object ConfigManager {
             val regex = Regex("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"")
             return regex.find(json)?.groupValues?.get(1) ?: ""
         }
+        fun extractArray(key: String): List<String> {
+            val r = Regex("\"$key\"\\s*:\\s*\\[(.*?)]", setOf(RegexOption.DOT_MATCHES_ALL))
+            val body = r.find(json)?.groupValues?.get(1) ?: return emptyList()
+            return if (body.isBlank()) emptyList() else body.split(Regex(",(?=(?:[^\\\"]*\\\"[^\\\"]*\\\")*[^\\\"]*$)"))
+                .map { it.trim().trim('"') }.map { unesc(it) }
+        }
 
         val themeRegex = Regex("\"theme\"\\s*:\\s*\"([^\"]+)\"")
         val themeRaw = themeRegex.find(json)?.groupValues?.get(1) ?: "Default"
@@ -120,6 +147,10 @@ object ConfigManager {
         val eaRaw = extractRaw("eaPath")
         val bnetRaw = extractRaw("battleNetPath")
         val ubiRaw = extractRaw("ubisoftPath")
+        val steamLibs = extractArray("steamLibraries")
+        val eaLibs = extractArray("eaLibraries")
+        val bnetLibs = extractArray("battleNetLibraries")
+        val ubiLibs = extractArray("ubisoftLibraries")
         val igdbIdRaw = extractRaw("igdbClientId")
         val igdbSecretRaw = extractRaw("igdbClientSecret")
         fun extractInt(key: String): Int {
@@ -129,12 +160,22 @@ object ConfigManager {
 
         val winW = extractInt("windowWidth")
         val winH = extractInt("windowHeight")
+        val steamLibraries =
+            if (steamLibs.isNotEmpty()) steamLibs else listOfNotNull(steamRaw.takeIf { it.isNotBlank() })
+        val eaLibraries = if (eaLibs.isNotEmpty()) eaLibs else listOfNotNull(eaRaw.takeIf { it.isNotBlank() })
+        val battleNetLibraries =
+            if (bnetLibs.isNotEmpty()) bnetLibs else listOfNotNull(bnetRaw.takeIf { it.isNotBlank() })
+        val ubisoftLibraries = if (ubiLibs.isNotEmpty()) ubiLibs else listOfNotNull(ubiRaw.takeIf { it.isNotBlank() })
         return AppConfig(
             theme = unesc(themeRaw),
             steamPath = unesc(steamRaw),
             eaPath = unesc(eaRaw),
             battleNetPath = unesc(bnetRaw),
             ubisoftPath = unesc(ubiRaw),
+            steamLibraries = steamLibraries.map { unesc(it) },
+            eaLibraries = eaLibraries.map { unesc(it) },
+            battleNetLibraries = battleNetLibraries.map { unesc(it) },
+            ubisoftLibraries = ubisoftLibraries.map { unesc(it) },
             igdbClientId = unesc(igdbIdRaw),
             igdbClientSecret = unesc(igdbSecretRaw),
             windowWidth = winW,
