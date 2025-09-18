@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.canyonwolf.sparklauncher.data.GameIndex
 import net.canyonwolf.sparklauncher.data.GameIndexManager
 import net.canyonwolf.sparklauncher.ui.components.TopMenuBar
@@ -31,10 +32,19 @@ fun App() {
     LaunchedEffect(appConfig) {
         scope.launch(Dispatchers.IO) {
             val idx = GameIndexManager.loadOrScan(appConfig)
-            gameIndex = idx
+            withContext(Dispatchers.Main) { gameIndex = idx }
             // Prefetch box art images on initial load to avoid lag when selecting games later
             net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchAll(idx.entries.map { it.toIgdbQueryName() })
-            // Do not prefetch IGDB metadata on initial load; it is persisted and refreshed only on reindex
+            // If metadata caches are missing/empty (e.g., cache files deleted), build them now and show loading state on Home
+            val launchersPresent = idx.entries.map { it.launcher }.toSet()
+            val needsBuild = launchersPresent.any { lt ->
+                !net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.isMetadataCachePopulated(lt)
+            }
+            if (needsBuild) {
+                net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchMetadataAll(
+                    idx.entries.map { it.launcher to it.toIgdbQueryName() }
+                )
+            }
         }
     }
 
@@ -49,7 +59,7 @@ fun App() {
             onReloadLibraries = {
                 scope.launch(Dispatchers.IO) {
                     val idx = GameIndexManager.rescanAndSave(appConfig)
-                    gameIndex = idx
+                    withContext(Dispatchers.Main) { gameIndex = idx }
                     // Prefetch again after rescan to refresh cache
                     net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchAll(idx.entries.map { it.toIgdbQueryName() })
                     net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchMetadataAll(idx.entries.map { it.launcher to it.toIgdbQueryName() })
@@ -82,9 +92,41 @@ fun App() {
                     .padding(innerPadding)
                     .safeContentPadding()
             ) {
+                var pendingSelection by remember { mutableStateOf<net.canyonwolf.sparklauncher.data.GameEntry?>(null) }
                 when (currentScreen) {
-                    Screen.Home -> HomeScreen()
-                    Screen.Library -> LibraryScreen(entries = gameIndex.entries)
+                    Screen.Home -> HomeScreen(
+                        entries = gameIndex.entries,
+                        onOpenGame = { entry ->
+                            pendingSelection = entry
+                            currentScreen = Screen.Library
+                        }
+                    )
+
+                    Screen.Library -> {
+                        LibraryScreen(
+                            entries = gameIndex.entries,
+                            preselected = pendingSelection,
+                            onReloadLibraries = {
+                                scope.launch(Dispatchers.IO) {
+                                    val idx = GameIndexManager.rescanAndSave(appConfig)
+                                    withContext(Dispatchers.Main) { gameIndex = idx }
+                                    net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchAll(idx.entries.map { it.toIgdbQueryName() })
+                                    net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchMetadataAll(idx.entries.map { it.launcher to it.toIgdbQueryName() })
+                                }
+                            },
+                            onRebuildCaches = {
+                                scope.launch(Dispatchers.IO) {
+                                    net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchMetadataAll(
+                                        gameIndex.entries.map { it.launcher to it.toIgdbQueryName() }
+                                    )
+                                }
+                            }
+                        )
+                        // Clear the pending selection after rendering once
+                        if (pendingSelection != null) {
+                            LaunchedEffect(Unit) { pendingSelection = null }
+                        }
+                    }
                 }
             }
         }

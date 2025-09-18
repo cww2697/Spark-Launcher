@@ -15,19 +15,46 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.canyonwolf.sparklauncher.data.GameEntry
 import net.canyonwolf.sparklauncher.data.LauncherType
+import net.canyonwolf.sparklauncher.data.UserDataStore
 import net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher
 
 @Composable
-fun LibraryScreen(entries: List<GameEntry>) {
+fun LibraryScreen(
+    entries: List<GameEntry>,
+    preselected: GameEntry? = null,
+    onReloadLibraries: (() -> Unit)? = null,
+    onRebuildCaches: (() -> Unit)? = null
+) {
     val grouped: Map<LauncherType, List<GameEntry>> = remember(entries) {
         entries.groupBy { it.launcher }
     }
 
     if (entries.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Library is empty", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "Your library is empty",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Try reloading your libraries or rebuilding caches.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    androidx.compose.material3.Button(onClick = { onReloadLibraries?.invoke() }) {
+                        Text("Reload Library")
+                    }
+                }
+            }
         }
         return
     }
@@ -37,13 +64,23 @@ fun LibraryScreen(entries: List<GameEntry>) {
     val expandedState = remember { mutableStateMapOf<LauncherType, Boolean>() }
     launchersInOrder.forEach { lt -> if (expandedState[lt] == null) expandedState[lt] = true }
 
-    var selected by remember(entries) { mutableStateOf<GameEntry?>(null) }
+    var selected by remember(entries) { mutableStateOf<GameEntry?>(preselected) }
     var boxArt by remember(selected) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var gameInfo by remember(selected) { mutableStateOf<BoxArtFetcher.GameInfo?>(null) }
     // Local loader state for on-demand fetch when metadata is missing
     var isInfoLoading by remember(selected) { mutableStateOf(false) }
     // System app icon as fallback when no box art exists
     var appIcon by remember(selected) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    // Play stats for the selected game
+    var playStats by remember(selected) { mutableStateOf<UserDataStore.PlayStat?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // Apply preselected only when provided; do not reset selection on later recompositions
+    LaunchedEffect(preselected) {
+        if (preselected != null) {
+            selected = preselected
+        }
+    }
 
     LaunchedEffect(selected) {
         try {
@@ -65,23 +102,23 @@ fun LibraryScreen(entries: List<GameEntry>) {
                     appIcon = null
                 } else {
                     // Fetch on background to avoid blocking UI
-                    val art = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val art = withContext(Dispatchers.IO) {
                         BoxArtFetcher.getBoxArt(queryName)
                     }
                     boxArt = art
                     if (art == null) {
                         // Load system app icon as fallback
-                        appIcon = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        appIcon = withContext(Dispatchers.IO) {
                             net.canyonwolf.sparklauncher.ui.util.SystemIconLoader.getIcon(sel.exePath)
                         }
                     } else {
                         appIcon = null
                     }
                     // First try to get cached metadata
-                    val cached = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val cached = withContext(Dispatchers.IO) {
                         BoxArtFetcher.getGameInfo(sel.launcher, queryName)
                     }
-                    val hasRecord = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val hasRecord = withContext(Dispatchers.IO) {
                         BoxArtFetcher.hasInfoRecord(sel.launcher, queryName)
                     }
                     if (cached != null) {
@@ -90,7 +127,7 @@ fun LibraryScreen(entries: List<GameEntry>) {
                     } else if (!hasRecord) {
                         // Only fetch on-demand if no record exists yet
                         isInfoLoading = true
-                        val fetched = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val fetched = withContext(Dispatchers.IO) {
                             BoxArtFetcher.fetchAndCacheGameInfo(sel.launcher, queryName)
                         }
                         // Only apply if selection hasn't changed
@@ -103,6 +140,10 @@ fun LibraryScreen(entries: List<GameEntry>) {
                         gameInfo = null
                         isInfoLoading = false
                     }
+                }
+                // Load play stats for the selected game
+                playStats = withContext(Dispatchers.IO) {
+                    UserDataStore.get(sel.name)
                 }
             }
         } catch (_: Throwable) {
@@ -178,56 +219,97 @@ fun LibraryScreen(entries: List<GameEntry>) {
                     modifier = Modifier.fillMaxWidth().weight(2f)
                 ) {
                     val detailsScroll = rememberScrollState()
-                    Row(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .verticalScroll(detailsScroll)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val name = selected?.name ?: "Select a game"
+                    if (selected == null) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = name,
+                                    text = "Select a game to see details",
                                     style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.weight(1f)
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
-                                val canPlay = selected != null
-                                androidx.compose.material3.Button(
-                                    onClick = { selected?.let { launchGame(it) } },
-                                    enabled = canPlay
-                                ) {
-                                    Text("Play")
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            if (selected != null && isInfoLoading) {
-                                ScrollingBoxesLoader()
-                            } else {
-                                // Genres chips row
-                                val genres = gameInfo?.genres.orEmpty()
-                                if (genres.isNotEmpty()) {
-                                    GenreChipsRow(genres = genres)
-                                    Spacer(Modifier.height(10.dp))
-                                }
-                                // Game description from IGDB
-                                val desc = gameInfo?.description.orEmpty()
-                                if (desc.isNotBlank()) {
-                                    Text(
-                                        text = desc,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
-                                    )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "Choose a game from the list on the left. If something is missing, try reloading your libraries or rebuilding caches.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    androidx.compose.material3.Button(onClick = { onReloadLibraries?.invoke() }) {
+                                        Text("Reload Library")
+                                    }
+                                    androidx.compose.material3.OutlinedButton(onClick = { onRebuildCaches?.invoke() }) {
+                                        Text("Rebuild Caches")
+                                    }
                                 }
                             }
                         }
-                        if (detailsScroll.maxValue > 0) {
-                            Spacer(Modifier.width(8.dp))
-                            VerticalScrollbar(
-                                adapter = rememberScrollbarAdapter(detailsScroll),
-                                modifier = Modifier.fillMaxHeight()
-                            )
+                    } else {
+                        Row(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .verticalScroll(detailsScroll)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val name = selected?.name ?: "Select a game"
+                                    Text(
+                                        text = name,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    androidx.compose.material3.Button(
+                                        onClick = {
+                                            val e = selected
+                                            if (e != null) {
+                                                scope.launch {
+                                                    val updated = withContext(Dispatchers.IO) {
+                                                        UserDataStore.recordPlay(e.name)
+                                                    }
+                                                    playStats = updated
+                                                    launchGame(e)
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Text("Play")
+                                    }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                if (isInfoLoading) {
+                                    ScrollingBoxesLoader()
+                                } else {
+                                    // Genres chips row
+                                    val genres = gameInfo?.genres.orEmpty()
+                                    if (genres.isNotEmpty()) {
+                                        GenreChipsRow(genres = genres)
+                                        Spacer(Modifier.height(10.dp))
+                                    }
+                                    // Game description from IGDB
+                                    val desc = gameInfo?.description.orEmpty()
+                                    if (desc.isNotBlank()) {
+                                        Text(
+                                            text = desc,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                                        )
+                                    }
+                                }
+                            }
+                            if (detailsScroll.maxValue > 0) {
+                                Spacer(Modifier.width(8.dp))
+                                VerticalScrollbar(
+                                    adapter = rememberScrollbarAdapter(detailsScroll),
+                                    modifier = Modifier.fillMaxHeight()
+                                )
+                            }
+                            Spacer(Modifier.width(16.dp))
+                            // Right-side stats card
+                            Box(modifier = Modifier.width(260.dp).fillMaxHeight()) {
+                                PlayStatsCard(playStats)
+                            }
                         }
                     }
                 }
@@ -275,7 +357,7 @@ private fun GameListItem(entry: GameEntry, selected: Boolean, onClick: () -> Uni
         // Load system icon off the UI thread to avoid stutter
         var iconBitmap by remember(entry.exePath) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
         LaunchedEffect(entry.exePath) {
-            iconBitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            iconBitmap = withContext(Dispatchers.IO) {
                 net.canyonwolf.sparklauncher.ui.util.SystemIconLoader.getIcon(entry.exePath)
             }
         }
@@ -382,6 +464,57 @@ private fun GenreChip(text: String) {
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
         )
+    }
+}
+
+@Composable
+private fun PlayStatsCard(stats: UserDataStore.PlayStat?) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 2.dp,
+        shadowElevation = 0.dp,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Text("Your Play Stats", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(12.dp))
+            // Plays count
+            Text(
+                "Plays",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Text((stats?.plays ?: 0).toString(), style = MaterialTheme.typography.displaySmall)
+            Spacer(Modifier.height(12.dp))
+            // Last played
+            Text(
+                "Last Played",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            val last = stats?.lastplayed.orEmpty()
+            val shown = remember(last) {
+                try {
+                    if (last.isBlank()) {
+                        "Never"
+                    } else {
+                        val dt = java.time.LocalDateTime.parse(last)
+                        dt.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a"))
+                    }
+                } catch (_: Throwable) {
+                    last
+                }
+            }
+            Text(shown, style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.weight(1f))
+            Text(
+                "Tip: Stats update when you click Play.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        }
     }
 }
 

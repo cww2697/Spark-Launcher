@@ -128,6 +128,13 @@ object BoxArtFetcher {
         }
     }
 
+    /** Returns true if the in-memory cache for this launcher has any metadata loaded (from disk or network). */
+    fun isMetadataCachePopulated(launcher: net.canyonwolf.sparklauncher.data.LauncherType): Boolean {
+        ensureInfoCacheLoaded(launcher)
+        val cache = infoCaches[launcher]
+        return cache != null && cache.isNotEmpty()
+    }
+
     // ---- Persistent cache helpers ----
     private fun getAppDataDir(): Path {
         val appDataEnv = System.getenv("APPDATA")
@@ -147,7 +154,8 @@ object BoxArtFetcher {
             try {
                 val file = getMetadataFilePath(launcher)
                 if (Files.exists(file)) {
-                    val text = Files.readAllBytes(file).toString(StandardCharsets.UTF_8)
+                    val bytes = Files.readAllBytes(file)
+                    val text = String(bytes, StandardCharsets.UTF_8)
                     // Parse entries: { "entries": [ {"name":"...","description":"...","genres":["..."]}, ... ] }
                     val body = Regex(
                         "\"entries\"\\s*:\\s*\\[(.*)]",
@@ -237,8 +245,7 @@ object BoxArtFetcher {
                 append("search \"")
                 append(gameName.replace("\\", " ").replace("\"", " "))
                 append("\"; ")
-                append("fields id,name,summary,genres,first_release_date; ")
-                append("where cover != null; ")
+                append("fields id,name,summary,storyline,genres,first_release_date; ")
                 if (normalized == "call of duty") {
                     append("sort first_release_date desc; ")
                 }
@@ -246,7 +253,7 @@ object BoxArtFetcher {
             }
             val gamesJson = igdbPost("games", gameQuery, token, clientId) ?: return null
             val gameObj = firstJsonObject(gamesJson) ?: return null
-            val summary = extractStringField(gameObj, "summary")
+            val summary = extractStringField(gameObj, "summary") ?: extractStringField(gameObj, "storyline")
             val genreIds = extractNumberArrayField(gameObj, "genres")
 
             val genreNames = if (genreIds.isNotEmpty()) {
