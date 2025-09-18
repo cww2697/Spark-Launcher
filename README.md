@@ -1,11 +1,11 @@
-###SparkLauncher
+# SparkLauncher
 
 [![CodeQL](https://github.com/cww2697/Spark-Launcher/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/cww2697/Spark-Launcher/actions/workflows/github-code-scanning/codeql)
 
 A lightweight desktop game launcher built with Compose Multiplatform for JVM. SparkLauncher aggregates games from
 multiple PC stores into a single library and fetches box art from IGDB so your library looks great.
 
-What it does
+## What it does
 
 - Aggregates libraries from the following PC launchers:
     - Steam
@@ -17,25 +17,25 @@ What it does
 - Integrates with IGDB to fetch cover art (requires your own IGDB credentials).
 - Provides a simple Settings window to customize paths, theme, and integration keys.
 
-Current status and limitations
+## Current status and limitations
 
 - Desktop (JVM) target only. Packaging presets are provided for Windows (MSI), macOS (DMG), and Linux (DEB).
 - Theme selector currently offers "Default" only (Community themes will be supported in a future release).
 - Game discovery depends on correctly configured paths to your store libraries.
 
-App layout
+## App layout
 
 - Home: Recommendations style carousels for quick access to your favorite games.
 - Library: Shows discovered games and their cover art when available.
 - Settings: Configure theme, library paths, IGDB credentials, and maintenance actions.
 
-Settings explained
+## Settings
 SparkLauncher stores its settings in a human-readable JSON file. On Windows the file is created on first run at:
 
 - %APPDATA%/SparkLauncher/config.json
   If %APPDATA% is not available, it falls back to your home directory under SparkLauncher/config.json.
 
-All settings fields in the Settings window:
+### All settings fields in the Settings window:
 
 - Theme
     - Dropdown with available UI themes. Currently only "Default".
@@ -50,7 +50,7 @@ All settings fields in the Settings window:
     - Ubisoft: Path to your Ubisoft Connect installation/library. Example: C:\Program Files (x86)\Ubisoft\Ubisoft Game
       Launcher
 
-Maintenance actions in Settings
+### Maintenance actions in Settings
 
 - Reload Libraries: Re-scan the configured store paths to update the Library view.
 - Rebuild Caches: Clears and rebuilds cached data such as fetched cover art and discovery results.
@@ -63,30 +63,30 @@ IGDB uses Twitch authentication. To get credentials:
 3) Paste both into Settings → Integrations.
    Note: Free usage may be rate-limited. SparkLauncher only needs basic access to fetch cover art data.
 
-Build from source
-Prerequisites
+## Build from source
+### Prerequisites
 
 - JDK 17 or newer (Compose Multiplatform for Desktop requires Java 17+).
 - Git (to clone the repository).
 - No global Gradle install is required; the included Gradle Wrapper will be used.
 
-Clone
+### Clone
 
 - git clone https://github.com/your-org-or-user/SparkLauncher.git
 - cd SparkLauncher
 
-Run (development)
+### Run (development)
 
 - Windows: .\gradlew.bat :composeApp:run
 - macOS/Linux: ./gradlew :composeApp:run
   This will launch the app with a development JVM.
 
-Package a distributable
+## Package a distributable
 The project is configured to build native installers using Compose Desktop native distributions:
 
 - Windows (MSI), macOS (DMG), Linux (DEB).
 
-Commands
+## Commands
 
 - Build all: ./gradlew :composeApp:packageDistributionForCurrentOS
 - Or build a specific format for your OS using the appropriate task.
@@ -96,12 +96,12 @@ Commands
         - Linux: ./gradlew :composeApp:packageDeb
           On Windows, use .\gradlew.bat instead of ./gradlew.
 
-Where is the entry point?
+## Where is the entry point?
 
 - Main class: net.canyonwolf.sparklauncher.MainKt
 - Compose configuration: composeApp/build.gradle.kts → compose.desktop.application
 
-Configuration file example
+## Configuration file example
 A typical config.json looks like this:
 ```json
 {
@@ -116,7 +116,7 @@ A typical config.json looks like this:
 ```
 You can edit this file while the app is closed. The Settings window also writes to the same file when you click Save.
 
-Troubleshooting
+## Troubleshooting
 
 - The app doesn’t find my games
     - Verify the paths in Settings → Libraries point to the correct install or library folders.
