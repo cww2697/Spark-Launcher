@@ -24,7 +24,9 @@ private enum class Screen { Home, Library }
 @Composable
 fun App() {
     // Load configuration once on app startup
-    val appConfig by remember { mutableStateOf(net.canyonwolf.sparklauncher.config.ConfigManager.loadOrCreateDefault()) }
+    val initialConfig = remember { net.canyonwolf.sparklauncher.config.ConfigManager.loadOrCreateDefault() }
+    var themeName by remember { mutableStateOf(initialConfig.theme) }
+    val appConfig by remember { mutableStateOf(initialConfig) }
     val isConfigEmpty by remember(appConfig) {
         mutableStateOf(
             net.canyonwolf.sparklauncher.config.ConfigManager.isEmpty(
@@ -55,7 +57,7 @@ fun App() {
         }
     }
 
-    net.canyonwolf.sparklauncher.ui.theme.AppTheme(themeName = appConfig.theme) {
+    net.canyonwolf.sparklauncher.ui.theme.AppTheme(themeName = themeName) {
         var currentScreen by remember { mutableStateOf(Screen.Home) }
         var isSettingsOpen by remember { mutableStateOf(false) }
 
@@ -78,7 +80,8 @@ fun App() {
                         gameIndex.entries.map { it.launcher to it.toIgdbQueryName() }
                     )
                 }
-            }
+            },
+            onThemeChanged = { newTheme -> themeName = newTheme }
         )
 
         Scaffold(

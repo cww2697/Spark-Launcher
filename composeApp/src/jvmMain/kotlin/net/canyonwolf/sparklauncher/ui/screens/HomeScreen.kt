@@ -14,7 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -167,100 +167,7 @@ fun HomeScreen(
                 genreOrder.forEach { genre ->
                     val list = genreGroups[genre].orEmpty()
                     if (list.isEmpty()) return@forEach
-
-                    Text(
-                        text = genre,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-                    )
-
-                    // Netflix-style carousel with arrow controls
-                    val listState = rememberLazyListState()
-                    val scope = rememberCoroutineScope()
-                    Box(Modifier.fillMaxWidth().height(240.dp)) {
-                        LazyRow(
-                            state = listState,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxSize().padding(horizontal = 36.dp)
-                        ) {
-                            items(list, key = { it.exePath }) { entry ->
-                                GameCarouselCard(entry = entry, onClick = { onOpenGame(entry) })
-                            }
-                        }
-
-                        // Determine when side scrollers are needed
-                        val canScrollLeft by remember(list.size) {
-                            derivedStateOf {
-                                // Show left scroller if we've scrolled past the start of the list
-                                // either by moving to a later item or by offsetting the first item.
-                                (listState.firstVisibleItemIndex > 0) || (listState.firstVisibleItemScrollOffset > 0)
-                            }
-                        }
-                        val canScrollRight by remember(list.size) {
-                            derivedStateOf {
-                                val info = listState.layoutInfo
-                                val last = info.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf false
-                                val viewportEnd = info.viewportEndOffset
-                                val lastEnd = last.offset + last.size
-                                // Show right scroller if there are more items beyond the last visible index,
-                                // or if the last item is only partially visible (its end exceeds the viewport end)
-                                (last.index < list.size - 1) || (last.index == list.size - 1 && lastEnd > viewportEnd)
-                            }
-                        }
-
-                        // Left thin vertical scroller
-                        if (canScrollLeft) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .width(28.dp)
-                                    .fillMaxHeight()
-                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
-                                    .clickable {
-                                        if (!listState.isScrollInProgress) {
-                                            val idx = listState.firstVisibleItemIndex
-                                            val offset = listState.firstVisibleItemScrollOffset
-                                            scope.launch {
-                                                if (idx == 0 && offset > 0) {
-                                                    // If the very first item is partially visible, nudge it fully into view
-                                                    listState.animateScrollBy(-offset.toFloat())
-                                                } else {
-                                                    val target = (idx - 1).coerceAtLeast(0)
-                                                    smoothScrollToItem(listState, target)
-                                                }
-                                            }
-                                        }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("❮", color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.alpha(0.95f))
-                            }
-                        }
-
-                        // Right thin vertical scroller
-                        if (canScrollRight) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .width(28.dp)
-                                    .fillMaxHeight()
-                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
-                                    .clickable {
-                                        if (!listState.isScrollInProgress) {
-                                            val target = (listState.firstVisibleItemIndex + 1).coerceAtMost(
-                                                (list.size - 1).coerceAtLeast(0)
-                                            )
-                                            scope.launch { smoothScrollToItem(listState, target) }
-                                        }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("❯", color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.alpha(0.95f))
-                            }
-                        }
-                    }
-
+                    CarouselSection(title = genre, items = list, onOpenGame = onOpenGame)
                     Spacer(Modifier.height(24.dp))
                 }
             }
@@ -269,6 +176,135 @@ fun HomeScreen(
                     adapter = rememberScrollbarAdapter(vScroll),
                     modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CarouselSection(title: String, items: List<GameEntry>, onOpenGame: (GameEntry) -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant, // Darker than background in dark theme
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 0.dp, // Avoid yellow tint from surfaceTint (primary)
+        shadowElevation = 6.dp,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+            )
+
+            val listState = rememberLazyListState()
+            val scope = rememberCoroutineScope()
+            Box(Modifier.fillMaxWidth().height(240.dp)) {
+                LazyRow(
+                    state = listState,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 48.dp)
+                ) {
+                    items(items, key = { it.exePath }) { entry ->
+                        Box(Modifier.padding(6.dp)) {
+                            GameCarouselCard(entry = entry, onClick = { onOpenGame(entry) })
+                        }
+                    }
+                }
+
+                val canScrollLeft by remember(items.size) {
+                    derivedStateOf {
+                        (listState.firstVisibleItemIndex > 0) || (listState.firstVisibleItemScrollOffset > 0)
+                    }
+                }
+                val canScrollRight by remember(items.size) {
+                    derivedStateOf {
+                        val info = listState.layoutInfo
+                        val last = info.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf false
+                        val viewportEnd = info.viewportEndOffset
+                        val lastEnd = last.offset + last.size
+                        (last.index < items.size - 1) || (last.index == items.size - 1 && lastEnd > viewportEnd)
+                    }
+                }
+
+                // Left circular arrow with elevation and ripple
+                if (canScrollLeft) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .size(40.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        tonalElevation = 2.dp,
+                        shadowElevation = 6.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable {
+                                    if (!listState.isScrollInProgress) {
+                                        val idx = listState.firstVisibleItemIndex
+                                        val offset = listState.firstVisibleItemScrollOffset
+                                        scope.launch {
+                                            if (idx == 0 && offset > 0) {
+                                                listState.animateScrollBy(-offset.toFloat())
+                                            } else {
+                                                val target = (idx - 1).coerceAtLeast(0)
+                                                smoothScrollToItem(listState, target)
+                                            }
+                                        }
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("❮")
+                        }
+                    }
+                }
+
+                // Right circular arrow with elevation and ripple
+                if (canScrollRight) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(40.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        tonalElevation = 2.dp,
+                        shadowElevation = 6.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable {
+                                    if (!listState.isScrollInProgress) {
+                                        val target = (listState.firstVisibleItemIndex + 1).coerceAtMost(
+                                            (items.size - 1).coerceAtLeast(0)
+                                        )
+                                        scope.launch { smoothScrollToItem(listState, target) }
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("❯")
+                        }
+                    }
+                }
             }
         }
     }
@@ -292,8 +328,9 @@ private fun GameCarouselCard(entry: GameEntry, onClick: () -> Unit) {
     val cardHeight = 240.dp
 
     Surface(
-        tonalElevation = 2.dp,
-        shadowElevation = 4.dp,
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp,
+        shape = MaterialTheme.shapes.medium,
         modifier = Modifier
             .size(cardWidth, cardHeight)
             .clickable(onClick = onClick)
@@ -311,13 +348,17 @@ private fun GameCarouselCard(entry: GameEntry, onClick: () -> Unit) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
             }
 
-            // Title overlay at bottom-right
+            // Title gradient overlay at bottom
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
+                    .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f))
+                        )
+                    )
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
                 Text(
                     text = entry.name,
