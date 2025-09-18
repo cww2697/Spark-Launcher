@@ -32,10 +32,8 @@ kotlin {
     }
 }
 
-// Single source of truth for app version
-version = "1.1.0"
+version = "1.1.1"
 
-// Ensure the JAR manifest carries the version so the app can read it at runtime
 tasks.withType(Jar::class.java).configureEach {
     manifest {
         attributes(
@@ -55,6 +53,12 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "Spark Launcher"
             packageVersion = project.version.toString()
+
+            windows {
+                menu = true
+                menuGroup = "Spark Launcher"
+                shortcut = true
+            }
         }
     }
 }
