@@ -101,6 +101,7 @@ Where is the entry point?
 
 Configuration file example
 A typical config.json looks like this:
+```json
 {
 "theme": "Default",
 "steamPath": "C:\\Program Files (x86)\\Steam",
@@ -110,6 +111,7 @@ A typical config.json looks like this:
 "igdbClientId": "your-client-id",
 "igdbClientSecret": "your-client-secret"
 }
+```
 You can edit this file while the app is closed. The Settings window also writes to the same file when you click Save.
 
 Troubleshooting
