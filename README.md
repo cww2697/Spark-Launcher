@@ -1,6 +1,6 @@
 # SparkLauncher
 
-[![CodeQL](https://github.com/cww2697/Spark-Launcher/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/cww2697/Spark-Launcher/actions/workflows/github-code-scanning/codeql)
+[![CodeQL](https://github.com/cww2697/Spark-Launcher/actions/workflows/codeql.yml/badge.svg)](https://github.com/cww2697/Spark-Launcher/actions/workflows/codeql.yml)
 
 A lightweight desktop game launcher built with Compose Multiplatform for JVM. SparkLauncher aggregates games from
 multiple PC stores into a single library and fetches box art from IGDB so your library looks great.
