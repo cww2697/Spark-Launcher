@@ -23,6 +23,14 @@ data class AppConfig(
 )
 
 object ConfigManager {
+    fun isEmpty(cfg: AppConfig): Boolean {
+        return cfg.steamPath.isBlank() &&
+                cfg.eaPath.isBlank() &&
+                cfg.battleNetPath.isBlank() &&
+                cfg.ubisoftPath.isBlank() &&
+                cfg.igdbClientId.isBlank() &&
+                cfg.igdbClientSecret.isBlank()
+    }
     private const val APP_FOLDER = "SparkLauncher"
     private const val CONFIG_FILE_NAME = "config.json"
 

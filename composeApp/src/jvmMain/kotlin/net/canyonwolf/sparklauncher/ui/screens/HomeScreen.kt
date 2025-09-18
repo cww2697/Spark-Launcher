@@ -91,6 +91,8 @@ private suspend fun smoothScrollToItem(state: LazyListState, targetIndex: Int) {
 fun HomeScreen(
     entries: List<GameEntry>,
     onOpenGame: (GameEntry) -> Unit,
+    isConfigEmpty: Boolean = false,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     // Observe metadata loading to recompute groups when rebuild finishes
     val metadataLoading by BoxArtFetcher.metadataLoading.collectAsState()
@@ -130,6 +132,38 @@ fun HomeScreen(
         val vScroll = rememberScrollState()
         Box(Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(vScroll)) {
+                if (isConfigEmpty) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        tonalElevation = 2.dp,
+                        shadowElevation = 0.dp,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Welcome!",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "Your configuration looks empty. Open Settings to connect your launchers and set IGDB credentials.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                )
+                            }
+                            androidx.compose.material3.Button(onClick = { onOpenSettings?.invoke() }) {
+                                Text("Open Settings")
+                            }
+                        }
+                    }
+                }
                 genreOrder.forEach { genre ->
                     val list = genreGroups[genre].orEmpty()
                     if (list.isEmpty()) return@forEach

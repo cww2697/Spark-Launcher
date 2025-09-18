@@ -28,7 +28,8 @@ fun LibraryScreen(
     entries: List<GameEntry>,
     preselected: GameEntry? = null,
     onReloadLibraries: (() -> Unit)? = null,
-    onRebuildCaches: (() -> Unit)? = null
+    isConfigEmpty: Boolean = false,
+    onOpenSettings: (() -> Unit)? = null
 ) {
     val grouped: Map<LauncherType, List<GameEntry>> = remember(entries) {
         entries.groupBy { it.launcher }
@@ -36,7 +37,33 @@ fun LibraryScreen(
 
     if (entries.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
+                if (isConfigEmpty) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        tonalElevation = 2.dp,
+                        shadowElevation = 0.dp,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("No games indexed yet", style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "It looks like you haven't configured your launchers. Open Settings to add paths and scan your library.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                )
+                            }
+                            androidx.compose.material3.Button(onClick = { onOpenSettings?.invoke() }) { Text("Open Settings") }
+                        }
+                    }
+                }
                 Text(
                     "Your library is empty",
                     style = MaterialTheme.typography.headlineSmall,
@@ -44,7 +71,7 @@ fun LibraryScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Try reloading your libraries or rebuilding caches.",
+                    "Try reloading your libraries.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                 )
@@ -73,6 +100,8 @@ fun LibraryScreen(
     var appIcon by remember(selected) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     // Play stats for the selected game
     var playStats by remember(selected) { mutableStateOf<UserDataStore.PlayStat?>(null) }
+    // Track if the selected game's process is currently running
+    var isRunning by remember(selected) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     // Apply preselected only when provided; do not reset selection on later recompositions
@@ -90,6 +119,7 @@ fun LibraryScreen(
                 gameInfo = null
                 isInfoLoading = false
                 appIcon = null
+                isRunning = false
             } else {
                 val normalized = sel.name.lowercase().trim().replace(Regex("\\s+"), " ")
                 val queryName = if (sel.launcher == LauncherType.BATTLENET && normalized == "call of duty") {
@@ -154,6 +184,23 @@ fun LibraryScreen(
         }
     }
 
+    // Poll whether the selected game's process is running and update UI state
+    LaunchedEffect(selected) {
+        val sel = selected
+        if (sel == null) {
+            isRunning = false
+        } else {
+            try {
+                while (selected === sel) {
+                    isRunning = isProcessRunning(sel.exePath)
+                    kotlinx.coroutines.delay(1000)
+                }
+            } catch (_: Throwable) {
+                isRunning = false
+            }
+        }
+    }
+
     Row(Modifier.fillMaxSize()) {
         // Left navigation list
         Surface(tonalElevation = 1.dp, modifier = Modifier.width(300.dp).fillMaxHeight()) {
@@ -211,6 +258,41 @@ fun LibraryScreen(
 
             // Opaque foreground panel occupying the bottom third of the pane (starting ~2/3 up)
             Column(modifier = Modifier.fillMaxSize()) {
+                // Config-empty notice at the top of the page (like Home)
+                if (isConfigEmpty) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            tonalElevation = 2.dp,
+                            shadowElevation = 0.dp,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Welcome!",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        "Your configuration looks empty. Open Settings to connect your launchers and set IGDB credentials.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                    )
+                                }
+                                androidx.compose.material3.Button(onClick = { onOpenSettings?.invoke() }) {
+                                    Text("Open Settings")
+                                }
+                            }
+                        }
+                    }
+                }
                 Spacer(Modifier.weight(1f))
                 Surface(
                     tonalElevation = 0.dp,
@@ -229,7 +311,7 @@ fun LibraryScreen(
                                 )
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    text = "Choose a game from the list on the left. If something is missing, try reloading your libraries or rebuilding caches.",
+                                    text = "Choose a game from the list on the left. If something is missing try reloading your libraries.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
                                 )
@@ -237,9 +319,6 @@ fun LibraryScreen(
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     androidx.compose.material3.Button(onClick = { onReloadLibraries?.invoke() }) {
                                         Text("Reload Library")
-                                    }
-                                    androidx.compose.material3.OutlinedButton(onClick = { onRebuildCaches?.invoke() }) {
-                                        Text("Rebuild Caches")
                                     }
                                 }
                             }
@@ -272,9 +351,10 @@ fun LibraryScreen(
                                                     launchGame(e)
                                                 }
                                             }
-                                        }
+                                        },
+                                        enabled = !isRunning
                                     ) {
-                                        Text("Play")
+                                        Text(if (isRunning) "Running" else "Play")
                                     }
                                 }
                                 Spacer(Modifier.height(8.dp))
@@ -518,3 +598,37 @@ private fun PlayStatsCard(stats: UserDataStore.PlayStat?) {
     }
 }
 
+
+private fun isProcessRunning(exePath: String): Boolean {
+    try {
+        val targetPath = exePath.trim().trim('"')
+        val targetFile = try {
+            java.nio.file.Paths.get(targetPath).fileName.toString()
+        } catch (_: Throwable) {
+            java.io.File(targetPath).name
+        }
+        val it = ProcessHandle.allProcesses().iterator()
+        while (it.hasNext()) {
+            val ph = it.next()
+            try {
+                val cmdOpt = ph.info().command()
+                if (cmdOpt.isPresent) {
+                    var cmd = cmdOpt.get()
+                    cmd = cmd.trim().trim('"')
+                    if (cmd.equals(targetPath, ignoreCase = true)) return true
+                    val cmdFile = try {
+                        java.nio.file.Paths.get(cmd).fileName.toString()
+                    } catch (_: Throwable) {
+                        java.io.File(cmd).name
+                    }
+                    if (cmdFile.equals(targetFile, ignoreCase = true)) return true
+                }
+            } catch (_: Throwable) {
+                // ignore per-process access issues
+            }
+        }
+    } catch (_: Throwable) {
+        // ignore
+    }
+    return false
+}

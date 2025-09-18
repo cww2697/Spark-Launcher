@@ -25,6 +25,13 @@ private enum class Screen { Home, Library }
 fun App() {
     // Load configuration once on app startup
     val appConfig by remember { mutableStateOf(net.canyonwolf.sparklauncher.config.ConfigManager.loadOrCreateDefault()) }
+    val isConfigEmpty by remember(appConfig) {
+        mutableStateOf(
+            net.canyonwolf.sparklauncher.config.ConfigManager.isEmpty(
+                appConfig
+            )
+        )
+    }
 
     // Load or scan game index in background
     var gameIndex by remember { mutableStateOf(GameIndex()) }
@@ -99,7 +106,9 @@ fun App() {
                         onOpenGame = { entry ->
                             pendingSelection = entry
                             currentScreen = Screen.Library
-                        }
+                        },
+                        isConfigEmpty = isConfigEmpty,
+                        onOpenSettings = { isSettingsOpen = true }
                     )
 
                     Screen.Library -> {
@@ -114,13 +123,8 @@ fun App() {
                                     net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchMetadataAll(idx.entries.map { it.launcher to it.toIgdbQueryName() })
                                 }
                             },
-                            onRebuildCaches = {
-                                scope.launch(Dispatchers.IO) {
-                                    net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchMetadataAll(
-                                        gameIndex.entries.map { it.launcher to it.toIgdbQueryName() }
-                                    )
-                                }
-                            }
+                            isConfigEmpty = isConfigEmpty,
+                            onOpenSettings = { isSettingsOpen = true }
                         )
                         // Clear the pending selection after rendering once
                         if (pendingSelection != null) {
