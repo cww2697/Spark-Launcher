@@ -1,5 +1,6 @@
 # SparkLauncher
 
+[![Automatic Dependency Submission](https://github.com/cww2697/Spark-Launcher/actions/workflows/dependency-graph/auto-submission/badge.svg)](https://github.com/cww2697/Spark-Launcher/actions/workflows/dependency-graph/auto-submission)
 [![CodeQL](https://github.com/cww2697/Spark-Launcher/actions/workflows/codeql.yml/badge.svg)](https://github.com/cww2697/Spark-Launcher/actions/workflows/codeql.yml)
 
 A lightweight desktop game launcher built with Compose Multiplatform for JVM. SparkLauncher aggregates games from
