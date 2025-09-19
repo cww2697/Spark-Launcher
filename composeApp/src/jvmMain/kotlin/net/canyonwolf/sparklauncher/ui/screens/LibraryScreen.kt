@@ -4,7 +4,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -161,7 +161,7 @@ fun LibraryScreen(
                             BoxArtFetcher.fetchAndCacheGameInfo(sel.launcher, queryName)
                         }
                         // Only apply if selection hasn't changed
-                        if (selected === sel) {
+                        if (selected?.exePath == sel.exePath) {
                             gameInfo = fetched
                             isInfoLoading = false
                         }
@@ -191,7 +191,7 @@ fun LibraryScreen(
             isRunning = false
         } else {
             try {
-                while (selected === sel) {
+                while (selected?.exePath == sel.exePath) {
                     isRunning = isProcessRunning(sel.exePath)
                     kotlinx.coroutines.delay(1000)
                 }
@@ -226,7 +226,7 @@ fun LibraryScreen(
                             )
                         }
                     }
-                    item(key = "divider-${launcher.name}") { Divider(thickness = 1.dp) }
+                    item(key = "divider-${launcher.name}") { HorizontalDivider(thickness = 1.dp) }
                 }
             }
         }
@@ -459,7 +459,23 @@ private fun GameListItem(entry: GameEntry, selected: Boolean, onClick: () -> Uni
 
 private fun launchGame(entry: GameEntry) {
     try {
-        val exe = java.io.File(entry.exePath)
+        val path = entry.exePath
+        // If exePath is a protocol URL (e.g., battlenet://game/pinta), open via Desktop to invoke handler
+        if (path.contains("://")) {
+            try {
+                val uri = java.net.URI(path)
+                if (java.awt.Desktop.isDesktopSupported()) {
+                    val d = java.awt.Desktop.getDesktop()
+                    if (d.isSupported(java.awt.Desktop.Action.BROWSE)) {
+                        d.browse(uri)
+                        return
+                    }
+                }
+            } catch (_: Throwable) {
+                // fall through to process builder attempt below
+            }
+        }
+        val exe = java.io.File(path)
         val dir = java.io.File(entry.dirPath)
         val pb = ProcessBuilder(exe.absolutePath)
         if (dir.exists()) pb.directory(dir)
