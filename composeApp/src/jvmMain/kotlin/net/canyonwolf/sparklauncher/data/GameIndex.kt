@@ -47,7 +47,7 @@ object GameIndexManager {
             if (!Files.exists(file)) return GameIndex()
             val content = Files.readAllBytes(file).toString(StandardCharsets.UTF_8)
             fromJson(content)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             GameIndex()
         }
     }
@@ -106,11 +106,19 @@ object GameIndexManager {
                         val exe = findFirstExe(gameDir)
                         if (exe != null) {
                             val name = gameDir.name
+                            // Special-case: For Battle.net title "Call of Duty Modern Warfare III",
+                            // use a custom protocol path to ensure proper launching via Battle.net.
+                            val exePathStr =
+                                if (launcher == LauncherType.BATTLENET && name == "Call of Duty Modern Warfare III") {
+                                    "battlenet://game/pinta"
+                                } else {
+                                    exe.toString()
+                                }
                             result.add(
                                 GameEntry(
                                     launcher = launcher,
                                     name = name,
-                                    exePath = exe.toString(),
+                                    exePath = exePathStr,
                                     dirPath = gameDir.toString(),
                                 )
                             )
