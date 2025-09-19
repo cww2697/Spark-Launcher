@@ -15,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -313,7 +312,6 @@ private fun CarouselSection(title: String, items: List<GameEntry>, onOpenGame: (
 
 @Composable
 private fun GameCarouselCard(entry: GameEntry, onClick: () -> Unit) {
-    // Load box art asynchronously using cached fetcher; fallback to system icon if not found
     var image by remember(entry) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var iconBitmap by remember(entry.exePath) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     LaunchedEffect(entry) {
@@ -325,7 +323,6 @@ private fun GameCarouselCard(entry: GameEntry, onClick: () -> Unit) {
             BoxArtFetcher.getBoxArt(queryName)
         }
         if (image == null) {
-            // Fetch application icon on IO dispatcher like in Library list
             iconBitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 net.canyonwolf.sparklauncher.ui.util.SystemIconLoader.getIcon(entry.exePath)
             }
@@ -355,7 +352,6 @@ private fun GameCarouselCard(entry: GameEntry, onClick: () -> Unit) {
                 }
 
                 iconBitmap != null -> {
-                    // Center the app icon as a fallback
                     Image(
                         bitmap = iconBitmap!!,
                         contentDescription = null,
@@ -364,32 +360,102 @@ private fun GameCarouselCard(entry: GameEntry, onClick: () -> Unit) {
                 }
 
                 else -> {
-                    // Subtle placeholder
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
                 }
             }
 
-            // Title gradient overlay at bottom
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .background(
-                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f))
-                        )
-                    )
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                    .padding(8.dp)
             ) {
-                Text(
-                    text = entry.name,
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.align(Alignment.CenterStart)
-                )
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    tonalElevation = 1.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+                ) {
+                    EllipsizedTextWithHover(
+                        text = entry.name,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        textStyle = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
         }
+    }
+}
+
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+private fun EllipsizedTextWithHover(
+    text: String,
+    modifier: Modifier = Modifier,
+    textStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium
+) {
+    var overflowed by remember(text, textStyle) { mutableStateOf(false) }
+
+    if (!overflowed) {
+        Box(modifier = modifier) {
+            Text(
+                text = text,
+                style = textStyle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { layout -> overflowed = layout.hasVisualOverflow }
+            )
+        }
+    } else {
+        val tooltipState = rememberBasicTooltipState()
+        val positionProvider = AboveStartPopupPositionProvider
+        BasicTooltipBox(
+            positionProvider = positionProvider,
+            tooltip = {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    tonalElevation = 3.dp,
+                    shadowElevation = 10.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                ) {
+                    Box(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp).widthIn(max = 420.dp)) {
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = Int.MAX_VALUE,
+                            overflow = TextOverflow.Clip
+                        )
+                    }
+                }
+            },
+            state = tooltipState,
+            modifier = modifier
+        ) {
+            Text(
+                text = text,
+                style = textStyle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { layout -> overflowed = layout.hasVisualOverflow }
+            )
+        }
+    }
+}
+
+private object AboveStartPopupPositionProvider : androidx.compose.ui.window.PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: androidx.compose.ui.unit.IntRect,
+        windowSize: androidx.compose.ui.unit.IntSize,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        popupContentSize: androidx.compose.ui.unit.IntSize
+    ): androidx.compose.ui.unit.IntOffset {
+        val x = anchorBounds.left
+        val gapPx = 6
+        val y = (anchorBounds.top - popupContentSize.height - gapPx).coerceAtLeast(0)
+        return androidx.compose.ui.unit.IntOffset(x, y)
     }
 }
