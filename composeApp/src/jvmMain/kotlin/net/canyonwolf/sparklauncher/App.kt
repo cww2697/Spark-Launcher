@@ -17,6 +17,7 @@ import net.canyonwolf.sparklauncher.data.GameIndexManager
 import net.canyonwolf.sparklauncher.ui.components.TopMenuBar
 import net.canyonwolf.sparklauncher.ui.screens.HomeScreen
 import net.canyonwolf.sparklauncher.ui.screens.LibraryScreen
+import net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher
 import net.canyonwolf.sparklauncher.ui.windows.SettingsWindow
 
 private enum class Screen { Home, Library }
@@ -35,22 +36,19 @@ fun App() {
         )
     }
 
-    // Load or scan game index in background
     var gameIndex by remember { mutableStateOf(GameIndex()) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(appConfig) {
         scope.launch(Dispatchers.IO) {
             val idx = GameIndexManager.loadOrScan(appConfig)
             withContext(Dispatchers.Main) { gameIndex = idx }
-            // Prefetch box art images on initial load to avoid lag when selecting games later
-            net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchAll(idx.entries.map { it.toIgdbQueryName() })
-            // If metadata caches are missing/empty (e.g., cache files deleted), build them now and show loading state on Home
+            BoxArtFetcher.prefetchAll(idx.entries.map { it.toIgdbQueryName() })
             val launchersPresent = idx.entries.map { it.launcher }.toSet()
             val needsBuild = launchersPresent.any { lt ->
-                !net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.isMetadataCachePopulated(lt)
+                !BoxArtFetcher.isMetadataCachePopulated(lt)
             }
             if (needsBuild) {
-                net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchMetadataAll(
+                BoxArtFetcher.prefetchMetadataAll(
                     idx.entries.map { it.launcher to it.toIgdbQueryName() }
                 )
             }
@@ -60,28 +58,34 @@ fun App() {
     net.canyonwolf.sparklauncher.ui.theme.AppTheme(themeName = themeName) {
         var currentScreen by remember { mutableStateOf(Screen.Home) }
         var isSettingsOpen by remember { mutableStateOf(false) }
+        val homeScrollState = remember { androidx.compose.foundation.ScrollState(0) }
 
         // Settings window (separate, blank window)
+        var configVersion by remember { mutableStateOf(0) }
+        fun libraryReload() {
+            scope.launch(Dispatchers.IO) {
+                val idx = GameIndexManager.rescanAndSave(appConfig)
+                withContext(Dispatchers.Main) { gameIndex = idx }
+                BoxArtFetcher.prefetchAll(idx.entries.map { it.toIgdbQueryName() })
+                BoxArtFetcher.prefetchMetadataAll(idx.entries.map { it.launcher to it.toIgdbQueryName() })
+            }
+        }
+
         SettingsWindow(
             isOpen = isSettingsOpen,
             onCloseRequest = { isSettingsOpen = false },
             onReloadLibraries = {
-                scope.launch(Dispatchers.IO) {
-                    val idx = GameIndexManager.rescanAndSave(appConfig)
-                    withContext(Dispatchers.Main) { gameIndex = idx }
-                    // Prefetch again after rescan to refresh cache
-                    net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchAll(idx.entries.map { it.toIgdbQueryName() })
-                    net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchMetadataAll(idx.entries.map { it.launcher to it.toIgdbQueryName() })
-                }
+                libraryReload()
             },
             onRebuildCaches = {
                 scope.launch(Dispatchers.IO) {
-                    net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchMetadataAll(
+                    BoxArtFetcher.prefetchMetadataAll(
                         gameIndex.entries.map { it.launcher to it.toIgdbQueryName() }
                     )
                 }
             },
-            onThemeChanged = { newTheme -> themeName = newTheme }
+            onThemeChanged = { newTheme -> themeName = newTheme },
+            onConfigChanged = { configVersion++ }
         )
 
         Scaffold(
@@ -111,7 +115,9 @@ fun App() {
                             currentScreen = Screen.Library
                         },
                         isConfigEmpty = isConfigEmpty,
-                        onOpenSettings = { isSettingsOpen = true }
+                        onOpenSettings = { isSettingsOpen = true },
+                        configVersion = configVersion,
+                        scrollState = homeScrollState
                     )
 
                     Screen.Library -> {
@@ -119,12 +125,7 @@ fun App() {
                             entries = gameIndex.entries,
                             preselected = pendingSelection,
                             onReloadLibraries = {
-                                scope.launch(Dispatchers.IO) {
-                                    val idx = GameIndexManager.rescanAndSave(appConfig)
-                                    withContext(Dispatchers.Main) { gameIndex = idx }
-                                    net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchAll(idx.entries.map { it.toIgdbQueryName() })
-                                    net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.prefetchMetadataAll(idx.entries.map { it.launcher to it.toIgdbQueryName() })
-                                }
+                                libraryReload()
                             },
                             isConfigEmpty = isConfigEmpty,
                             onOpenSettings = { isSettingsOpen = true }

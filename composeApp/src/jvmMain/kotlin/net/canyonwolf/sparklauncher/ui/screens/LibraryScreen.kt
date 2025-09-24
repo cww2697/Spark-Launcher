@@ -4,16 +4,20 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -60,7 +64,7 @@ fun LibraryScreen(
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
                                 )
                             }
-                            androidx.compose.material3.Button(onClick = { onOpenSettings?.invoke() }) { Text("Open Settings") }
+                            Button(onClick = { onOpenSettings?.invoke() }) { Text("Open Settings") }
                         }
                     }
                 }
@@ -77,7 +81,7 @@ fun LibraryScreen(
                 )
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    androidx.compose.material3.Button(onClick = { onReloadLibraries?.invoke() }) {
+                    Button(onClick = { onReloadLibraries?.invoke() }) {
                         Text("Reload Library")
                     }
                 }
@@ -87,9 +91,17 @@ fun LibraryScreen(
     }
 
     // Expand/collapse states per launcher
-    val launchersInOrder = listOf(LauncherType.STEAM, LauncherType.EA, LauncherType.BATTLENET, LauncherType.UBISOFT)
+    val launchersInOrder =
+        listOf(LauncherType.STEAM, LauncherType.EA, LauncherType.BATTLENET, LauncherType.UBISOFT, LauncherType.CUSTOM)
     val expandedState = remember { mutableStateMapOf<LauncherType, Boolean>() }
     launchersInOrder.forEach { lt -> if (expandedState[lt] == null) expandedState[lt] = true }
+
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val filteredGrouped: Map<LauncherType, List<GameEntry>> = remember(entries, searchQuery) {
+        val q = searchQuery.trim()
+        val filtered = if (q.isBlank()) entries else entries.filter { it.name.contains(q, ignoreCase = true) }
+        filtered.groupBy { it.launcher }
+    }
 
     var selected by remember(entries) { mutableStateOf<GameEntry?>(preselected) }
     var boxArt by remember(selected) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
@@ -205,25 +217,102 @@ fun LibraryScreen(
         // Left navigation list
         Surface(tonalElevation = 1.dp, modifier = Modifier.width(300.dp).fillMaxHeight()) {
             LazyColumn(Modifier.fillMaxSize().padding(vertical = 8.dp)) {
+                item(key = "search-bar") {
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
+                        val fieldTextStyle = MaterialTheme.typography.bodySmall.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeightStyle = LineHeightStyle(
+                                alignment = LineHeightStyle.Alignment.Center,
+                                trim = LineHeightStyle.Trim.Both
+                            )
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(28.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                    if (searchQuery.isBlank()) {
+                                        Text(
+                                            text = "Search library…",
+                                            style = fieldTextStyle.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    androidx.compose.foundation.text.BasicTextField(
+                                        value = searchQuery,
+                                        onValueChange = { searchQuery = it },
+                                        singleLine = true,
+                                        textStyle = fieldTextStyle,
+                                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                                if (searchQuery.isNotBlank()) {
+                                    Surface(
+                                        shape = androidx.compose.foundation.shape.CircleShape,
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        tonalElevation = 0.dp,
+                                        modifier = Modifier.size(20.dp).clickable { searchQuery = "" }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Close,
+                                            contentDescription = "Clear search",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(3.dp).size(12.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 launchersInOrder.forEach { launcher ->
-                    val list = grouped[launcher].orEmpty()
-                    if (list.isEmpty()) return@forEach
+                    val originalList = grouped[launcher].orEmpty()
+                    if (originalList.isEmpty()) return@forEach
+                    val shownList = filteredGrouped[launcher].orEmpty()
 
                     item(key = "header-${launcher.name}") {
                         LauncherHeader(
                             launcher = launcher,
-                            count = list.size,
+                            count = shownList.size,
                             expanded = expandedState[launcher] == true,
                             onToggle = { expandedState[launcher] = !(expandedState[launcher] ?: true) }
                         )
                     }
                     if (expandedState[launcher] == true) {
-                        items(list, key = { "${it.launcher}:${it.exePath}" }) { e ->
-                            GameListItem(
-                                entry = e,
-                                selected = selected?.exePath == e.exePath,
-                                onClick = { selected = e }
-                            )
+                        if (shownList.isEmpty() && searchQuery.isNotBlank()) {
+                            item(key = "nores-${launcher.name}") {
+                                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                                    val lname = when (launcher) {
+                                        LauncherType.STEAM -> "Steam"
+                                        LauncherType.EA -> "EA App"
+                                        LauncherType.BATTLENET -> "Battle.net"
+                                        LauncherType.UBISOFT -> "Ubisoft Connect"
+                                        LauncherType.CUSTOM -> "Custom"
+                                    }
+                                    Text(
+                                        text = "No results found under $lname",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                        fontStyle = FontStyle.Italic
+                                    )
+                                }
+                            }
+                        } else {
+                            items(shownList, key = { "${it.launcher}:${it.exePath}" }) { e ->
+                                GameListItem(
+                                    entry = e,
+                                    selected = selected?.exePath == e.exePath,
+                                    onClick = { selected = e }
+                                )
+                            }
                         }
                     }
                     item(key = "divider-${launcher.name}") { HorizontalDivider(thickness = 1.dp) }
@@ -286,7 +375,7 @@ fun LibraryScreen(
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
                                     )
                                 }
-                                androidx.compose.material3.Button(onClick = { onOpenSettings?.invoke() }) {
+                                Button(onClick = { onOpenSettings?.invoke() }) {
                                     Text("Open Settings")
                                 }
                             }
@@ -317,7 +406,7 @@ fun LibraryScreen(
                                 )
                                 Spacer(Modifier.height(16.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    androidx.compose.material3.Button(onClick = { onReloadLibraries?.invoke() }) {
+                                    Button(onClick = { onReloadLibraries?.invoke() }) {
                                         Text("Reload Library")
                                     }
                                 }
@@ -339,7 +428,7 @@ fun LibraryScreen(
                                         color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    androidx.compose.material3.Button(
+                                    Button(
                                         onClick = {
                                             val e = selected
                                             if (e != null) {
@@ -405,6 +494,7 @@ private fun LauncherHeader(launcher: LauncherType, count: Int, expanded: Boolean
         LauncherType.EA -> "EA"
         LauncherType.BATTLENET -> "BN"
         LauncherType.UBISOFT -> "Ubi"
+        LauncherType.CUSTOM -> "★"
     }
     Row(
         modifier = Modifier.fillMaxWidth().clickable { onToggle() }.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -420,6 +510,7 @@ private fun LauncherHeader(launcher: LauncherType, count: Int, expanded: Boolean
                 LauncherType.EA -> "EA App"
                 LauncherType.BATTLENET -> "Battle.net"
                 LauncherType.UBISOFT -> "Ubisoft Connect"
+                LauncherType.CUSTOM -> "Custom"
             } + " (" + count + ")",
             style = MaterialTheme.typography.titleMedium
         )

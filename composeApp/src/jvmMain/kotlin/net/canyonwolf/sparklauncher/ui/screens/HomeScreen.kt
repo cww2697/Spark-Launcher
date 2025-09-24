@@ -1,7 +1,7 @@
 package net.canyonwolf.sparklauncher.ui.screens
 
 import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -23,67 +24,24 @@ import net.canyonwolf.sparklauncher.data.GameEntry
 import net.canyonwolf.sparklauncher.data.LauncherType
 import net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher
 
-private suspend fun smoothScrollToItem(state: LazyListState, targetIndex: Int) {
-    // Ensure there is content
-    val total = state.layoutInfo.totalItemsCount
-    if (total <= 0) return
+private fun estimateItemSpanPx(state: LazyListState): Float {
+    val info = state.layoutInfo
+    val items = info.visibleItemsInfo.sortedBy { it.index }
+    val deltas = items.zip(items.drop(1)).map { (a, b) -> (b.offset - a.offset).toFloat() }
+    return (deltas.takeIf { it.isNotEmpty() }?.average()?.toFloat() ?: 200f)
+}
 
-    // Bound target to available items
-    val boundedTarget = targetIndex.coerceIn(0, total - 1)
+private suspend fun animateByCards(state: LazyListState, cards: Int, direction: Int) {
+    if (cards <= 0 || direction == 0) return
+    val span = estimateItemSpanPx(state)
+    var distance = span * cards * direction
 
-    // Decide direction based on current first visible index
-    var dir = when {
-        boundedTarget > state.firstVisibleItemIndex -> 1
-        boundedTarget < state.firstVisibleItemIndex -> -1
-        else -> 0
+    // When moving left (direction < 0) and we have a partial leading offset, include it for smoothness
+    if (direction < 0) {
+        val offset = state.firstVisibleItemScrollOffset
+        if (offset > 0) distance -= offset.toFloat()
     }
-    if (dir == 0) return
-
-    // We'll scroll by approximately one card per step using pixel deltas derived from layout info.
-    // This avoids internal re-targeting issues in animateScrollToItem on Desktop that can halt mid-way.
-    var safety = 0
-    while (true) {
-        val info = state.layoutInfo
-        val firstIndex = info.visibleItemsInfo.firstOrNull()?.index ?: state.firstVisibleItemIndex
-        val firstOffset = state.firstVisibleItemScrollOffset
-
-        // Stop if we've reached or passed the target depending on direction
-        if ((dir > 0 && firstIndex >= boundedTarget) || (dir < 0 && firstIndex <= boundedTarget)) {
-            break
-        }
-
-        // Estimate per-item spacing in pixels based on visible items offsets
-        val items = info.visibleItemsInfo.sortedBy { it.index }
-        val deltas = items.zip(items.drop(1)).map { (a, b) -> (b.offset - a.offset).toFloat() }
-        val stepPx = (deltas.takeIf { it.isNotEmpty() }?.average()?.toFloat() ?: 200f) * dir
-
-        // Perform animated scroll by the estimated delta
-        state.animateScrollBy(stepPx)
-
-        // If after the animation we didn't move at all, bail out to avoid perceived freeze
-        val newInfo = state.layoutInfo
-        val newFirstIndex = newInfo.visibleItemsInfo.firstOrNull()?.index ?: state.firstVisibleItemIndex
-        val newFirstOffset = state.firstVisibleItemScrollOffset
-        if (newFirstIndex == firstIndex && newFirstOffset == firstOffset) {
-            // As a fallback, try a small nudge using animateScrollBy again. If still no movement, break.
-            state.animateScrollBy(80f * dir)
-            val chkIndex = state.layoutInfo.visibleItemsInfo.firstOrNull()?.index ?: state.firstVisibleItemIndex
-            val chkOffset = state.firstVisibleItemScrollOffset
-            if (chkIndex == firstIndex && chkOffset == firstOffset) break
-        }
-
-        // Safety to avoid infinite loops in extreme cases
-        safety++
-        if (safety > 20) break
-
-        // Recompute direction relative to target after progress
-        dir = when {
-            boundedTarget > state.firstVisibleItemIndex -> 1
-            boundedTarget < state.firstVisibleItemIndex -> -1
-            else -> 0
-        }
-        if (dir == 0) break
-    }
+    state.animateScrollBy(distance)
 }
 
 @Composable
@@ -92,12 +50,18 @@ fun HomeScreen(
     onOpenGame: (GameEntry) -> Unit,
     isConfigEmpty: Boolean = false,
     onOpenSettings: (() -> Unit)? = null,
+    configVersion: Int = 0,
+    scrollState: ScrollState? = null,
 ) {
     // Observe metadata loading to recompute groups when rebuild finishes
     val metadataLoading by BoxArtFetcher.metadataLoading.collectAsState()
     val imagesPrefetching by BoxArtFetcher.imagesPrefetching.collectAsState()
-    // Group entries by genre using cached IGDB metadata (no network). Fallback to "Uncategorized".
-    val genreGroups: Map<String, List<GameEntry>> = remember(entries, metadataLoading) {
+    // Read current config and group entries by genre using cached IGDB metadata (no network).
+    val currentConfig =
+        remember(configVersion) { net.canyonwolf.sparklauncher.config.ConfigManager.loadOrCreateDefault() }
+    val genreGroups: Map<String, List<GameEntry>> = remember(entries, metadataLoading, configVersion) {
+        val showUncat = currentConfig.showUncategorizedTitles
+        val singleCategoryOnly = !currentConfig.showGamesInMultipleCategories
         val map = linkedMapOf<String, MutableList<GameEntry>>()
         fun add(genre: String, e: GameEntry) {
             map.getOrPut(genre) { mutableListOf() }.add(e)
@@ -110,9 +74,13 @@ fun HomeScreen(
             val info = BoxArtFetcher.getGameInfo(e.launcher, queryName)
             val genres = info?.genres?.filter { it.isNotBlank() } ?: emptyList()
             if (genres.isEmpty()) {
-                add("Uncategorized", e)
+                if (showUncat) add("Uncategorized", e)
             } else {
-                genres.forEach { g -> add(g, e) }
+                if (singleCategoryOnly) {
+                    add(genres.first(), e)
+                } else {
+                    genres.forEach { g -> add(g, e) }
+                }
             }
         }
         // Convert to immutable lists
@@ -129,7 +97,7 @@ fun HomeScreen(
             }
         }
     } else {
-        val vScroll = rememberScrollState()
+        val vScroll = scrollState ?: rememberScrollState()
         Box(Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(vScroll)) {
                 if (isConfigEmpty) {
@@ -202,16 +170,33 @@ private fun CarouselSection(title: String, items: List<GameEntry>, onOpenGame: (
             val listState = rememberLazyListState()
             val scope = rememberCoroutineScope()
             Box(Modifier.fillMaxWidth().height(240.dp)) {
+                // Enable wheel side-scrolling and click-drag panning
+                val scrollableState = rememberScrollableState { delta ->
+                    // Positive delta means scroll left in Compose; LazyListState.scrollBy uses pixels
+                    // We invert to make natural scrolling with mouse wheel/trackpad
+                    scope.launch { listState.animateScrollBy(-delta) }
+                    delta
+                }
                 LazyRow(
                     state = listState,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(vertical = 8.dp),
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 48.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 48.dp)
+                        .scrollable(state = scrollableState, orientation = Orientation.Horizontal)
+                        .pointerInput(listState) {
+                            detectDragGestures(
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    // Drag right (positive x) should move content left → negative scroll
+                                    scope.launch { listState.scrollBy(-dragAmount.x) }
+                                }
+                            )
+                        }
                 ) {
                     items(items, key = { it.exePath }) { entry ->
-                        Box(Modifier.padding(6.dp)) {
-                            GameCarouselCard(entry = entry, onClick = { onOpenGame(entry) })
-                        }
+                        GameCarouselCard(entry = entry, onClick = { onOpenGame(entry) })
                     }
                 }
 
@@ -258,8 +243,7 @@ private fun CarouselSection(title: String, items: List<GameEntry>, onOpenGame: (
                                             if (idx == 0 && offset > 0) {
                                                 listState.animateScrollBy(-offset.toFloat())
                                             } else {
-                                                val target = (idx - 1).coerceAtLeast(0)
-                                                smoothScrollToItem(listState, target)
+                                                animateByCards(listState, cards = 2, direction = -1)
                                             }
                                         }
                                     }
@@ -293,10 +277,8 @@ private fun CarouselSection(title: String, items: List<GameEntry>, onOpenGame: (
                                 .fillMaxSize()
                                 .clickable {
                                     if (!listState.isScrollInProgress) {
-                                        val target = (listState.firstVisibleItemIndex + 1).coerceAtMost(
-                                            (items.size - 1).coerceAtLeast(0)
-                                        )
-                                        scope.launch { smoothScrollToItem(listState, target) }
+                                        // Advance by two cards smoothly in a single animation
+                                        scope.launch { animateByCards(listState, cards = 2, direction = 1) }
                                     }
                                 },
                             contentAlignment = Alignment.Center
@@ -304,6 +286,17 @@ private fun CarouselSection(title: String, items: List<GameEntry>, onOpenGame: (
                             Text("❯")
                         }
                     }
+                }
+
+                // Bottom horizontal scrollbar for side-scrolling visibility and control
+                if (canScrollLeft || canScrollRight) {
+                    HorizontalScrollbar(
+                        adapter = rememberScrollbarAdapter(listState),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = 48.dp)
+                    )
                 }
             }
         }
