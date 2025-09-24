@@ -1,8 +1,11 @@
+@file:Suppress("DEPRECATION")
+
 package net.canyonwolf.sparklauncher.ui.util
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import net.canyonwolf.sparklauncher.config.ConfigManager
+import net.canyonwolf.sparklauncher.data.LauncherType
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -33,8 +36,8 @@ object BoxArtFetcher {
     private val urlCache = ConcurrentHashMap<String, String?>()
 
     // Per-launcher in-memory metadata caches
-    private val infoCaches: java.util.EnumMap<net.canyonwolf.sparklauncher.data.LauncherType, ConcurrentHashMap<String, GameInfo?>> =
-        java.util.EnumMap(net.canyonwolf.sparklauncher.data.LauncherType::class.java)
+    private val infoCaches: java.util.EnumMap<LauncherType, ConcurrentHashMap<String, GameInfo?>> =
+        java.util.EnumMap(LauncherType::class.java)
 
     // Persistent metadata cache files per launcher under caches/
     private const val APP_FOLDER = "SparkLauncher"
@@ -43,8 +46,8 @@ object BoxArtFetcher {
     private const val METADATA_FILE_PREFIX = "igdb_metadata_"
     private const val METADATA_FILE_SUFFIX = ".json"
     @Volatile
-    private var cacheLoadedFromDisk: MutableMap<net.canyonwolf.sparklauncher.data.LauncherType, Boolean> =
-        net.canyonwolf.sparklauncher.data.LauncherType.values().associateWith { false }.toMutableMap()
+    private var cacheLoadedFromDisk: MutableMap<LauncherType, Boolean> =
+        LauncherType.entries.associateWith { false }.toMutableMap()
 
     // Expose metadata loading state for UI loaders
     private val _metadataLoading = kotlinx.coroutines.flow.MutableStateFlow(false)
@@ -62,9 +65,7 @@ object BoxArtFetcher {
 
     fun getBoxArt(gameName: String): ImageBitmap? {
         if (gameName.isBlank()) return null
-        // 1) In-memory cache
         imageCache[gameName]?.let { return it }
-        // 2) Disk cache under caches/images using hash of gameName
         val file = getImageFilePath(gameName)
         try {
             if (Files.exists(file)) {
@@ -80,16 +81,14 @@ object BoxArtFetcher {
             }
         } catch (_: Throwable) { /* ignore and continue to network */
         }
-        // 3) Network fetch via IGDB and persist to disk
         return imageCache.computeIfAbsent(gameName) {
             val url = findImageUrl(gameName) ?: return@computeIfAbsent null
             val bytes = downloadImageBytes(url) ?: return@computeIfAbsent null
             try {
-                // Ensure directories exist before writing
                 val dir = file.parent
                 if (!Files.exists(dir)) Files.createDirectories(dir)
                 Files.write(file, bytes)
-            } catch (_: Throwable) { /* best-effort; ignore write errors */
+            } catch (_: Throwable) {
             }
             val img: BufferedImage = ImageIO.read(bytes.inputStream()) ?: return@computeIfAbsent null
             img.toComposeImageBitmap()
@@ -118,7 +117,7 @@ object BoxArtFetcher {
         }
     }
 
-    fun getGameInfo(launcher: net.canyonwolf.sparklauncher.data.LauncherType, gameName: String): GameInfo? {
+    fun getGameInfo(launcher: LauncherType, gameName: String): GameInfo? {
         if (gameName.isBlank()) return null
         ensureInfoCacheLoaded(launcher)
         // Return only cached info here to avoid rate-limiting; network fetch happens only via prefetchMetadataAll (on reindex)
@@ -126,7 +125,7 @@ object BoxArtFetcher {
     }
 
     /** Returns true if we have a cached record (including a negative cache) for this game. */
-    fun hasInfoRecord(launcher: net.canyonwolf.sparklauncher.data.LauncherType, gameName: String): Boolean {
+    fun hasInfoRecord(launcher: LauncherType, gameName: String): Boolean {
         if (gameName.isBlank()) return false
         ensureInfoCacheLoaded(launcher)
         return infoCaches.getOrPut(launcher) { ConcurrentHashMap() }.containsKey(gameName)
@@ -136,26 +135,23 @@ object BoxArtFetcher {
      * On-demand fetch for a single game. If not present in cache, fetch from IGDB now,
      * update in-memory cache and persist it, then return the result. Returns null on failure.
      */
-    fun fetchAndCacheGameInfo(launcher: net.canyonwolf.sparklauncher.data.LauncherType, gameName: String): GameInfo? {
+    fun fetchAndCacheGameInfo(launcher: LauncherType, gameName: String): GameInfo? {
         if (gameName.isBlank()) return null
         ensureInfoCacheLoaded(launcher)
         val cache = infoCaches.getOrPut(launcher) { ConcurrentHashMap() }
         if (cache.containsKey(gameName)) {
-            // Return previously cached value (may be null to indicate negative cache)
             return cache[gameName]
         }
         val fetched = fetchGameInfo(gameName)
-        // Cache the result including null (negative cache) to avoid retrying on every selection
         cache[gameName] = fetched
         saveInfoCache(launcher)
         return fetched
     }
 
-    fun prefetchMetadataAll(items: Collection<Pair<net.canyonwolf.sparklauncher.data.LauncherType, String>>) {
+    fun prefetchMetadataAll(items: Collection<Pair<LauncherType, String>>) {
         if (items.isEmpty()) return
         _metadataLoading.value = true
         try {
-            // Group by launcher and process
             val grouped = items.groupBy({ it.first }, { it.second })
             grouped.forEach { (launcher, names) ->
                 ensureInfoCacheLoaded(launcher)
@@ -173,7 +169,7 @@ object BoxArtFetcher {
     }
 
     /** Returns true if the in-memory cache for this launcher has any metadata loaded (from disk or network). */
-    fun isMetadataCachePopulated(launcher: net.canyonwolf.sparklauncher.data.LauncherType): Boolean {
+    fun isMetadataCachePopulated(launcher: LauncherType): Boolean {
         ensureInfoCacheLoaded(launcher)
         val cache = infoCaches[launcher]
         return cache != null && cache.isNotEmpty()
@@ -201,10 +197,10 @@ object BoxArtFetcher {
 
     private fun getImageFilePath(gameName: String): Path =
         getImagesDir().resolve("art_" + sha1Hex(gameName.lowercase()) + ".jpg")
-    private fun getMetadataFilePath(launcher: net.canyonwolf.sparklauncher.data.LauncherType): Path =
+    private fun getMetadataFilePath(launcher: LauncherType): Path =
         getCachesDir().resolve(METADATA_FILE_PREFIX + launcher.name.lowercase() + METADATA_FILE_SUFFIX)
 
-    private fun ensureInfoCacheLoaded(launcher: net.canyonwolf.sparklauncher.data.LauncherType) {
+    private fun ensureInfoCacheLoaded(launcher: LauncherType) {
         if (cacheLoadedFromDisk[launcher] == true) return
         synchronized(infoCaches) {
             if (cacheLoadedFromDisk[launcher] == true) return
@@ -223,9 +219,11 @@ object BoxArtFetcher {
                             Regex("\\{[^}]*} ", RegexOption.DOT_MATCHES_ALL).findAll(body).map { it.value.trim() }
                                 .toList()
                         val objs2 =
-                            if (objs.isNotEmpty()) objs else Regex("\\{[^}]*}", RegexOption.DOT_MATCHES_ALL).findAll(
-                                body
-                            ).map { it.value }.toList()
+                            objs.ifEmpty {
+                                Regex("\\{[^}]*}", RegexOption.DOT_MATCHES_ALL).findAll(
+                                    body
+                                ).map { it.value }.toList()
+                            }
                         val cache = infoCaches.getOrPut(launcher) { ConcurrentHashMap() }
                         objs2.forEach { obj ->
                             val name = Regex("\"name\"\\s*:\\s*\"([^\"]*)\"").find(obj)?.groupValues?.getOrNull(1)
@@ -249,25 +247,26 @@ object BoxArtFetcher {
                     }
                 }
             } catch (_: Throwable) {
-                // ignore bad cache file
+                // ignore bad cache files
             } finally {
                 cacheLoadedFromDisk[launcher] = true
             }
         }
     }
 
-    private fun hasConfiguredPath(launcher: net.canyonwolf.sparklauncher.data.LauncherType): Boolean {
+    private fun hasConfiguredPath(launcher: LauncherType): Boolean {
         val cfg = ConfigManager.loadOrCreateDefault()
         fun any(list: List<String>, legacy: String) = list.any { it.isNotBlank() } || legacy.isNotBlank()
         return when (launcher) {
-            net.canyonwolf.sparklauncher.data.LauncherType.STEAM -> any(cfg.steamLibraries, cfg.steamPath)
-            net.canyonwolf.sparklauncher.data.LauncherType.EA -> any(cfg.eaLibraries, cfg.eaPath)
-            net.canyonwolf.sparklauncher.data.LauncherType.BATTLENET -> any(cfg.battleNetLibraries, cfg.battleNetPath)
-            net.canyonwolf.sparklauncher.data.LauncherType.UBISOFT -> any(cfg.ubisoftLibraries, cfg.ubisoftPath)
+            LauncherType.STEAM -> any(cfg.steamLibraries, cfg.steamPath)
+            LauncherType.EA -> any(cfg.eaLibraries, cfg.eaPath)
+            LauncherType.BATTLENET -> any(cfg.battleNetLibraries, cfg.battleNetPath)
+            LauncherType.UBISOFT -> any(cfg.ubisoftLibraries, cfg.ubisoftPath)
+            LauncherType.CUSTOM -> any(cfg.customLibraries, "")
         }
     }
 
-    private fun saveInfoCache(launcher: net.canyonwolf.sparklauncher.data.LauncherType) {
+    private fun saveInfoCache(launcher: LauncherType) {
         try {
             if (!hasConfiguredPath(launcher)) return // Do not create cache file if no path configured
             val cachesDir = getCachesDir()
@@ -425,9 +424,9 @@ object BoxArtFetcher {
             input?.use { s ->
                 val text = String(s.readAllBytesCompat(), StandardCharsets.UTF_8)
                 val token =
-                    Regex("\\\"access_token\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"").find(text)?.groupValues?.getOrNull(1)
+                    Regex("\"access_token\"\\s*:\\s*\"([^\"]+)\"").find(text)?.groupValues?.getOrNull(1)
                 val expiresIn =
-                    Regex("\\\"expires_in\\\"\\s*:\\s*(\\d+)").find(text)?.groupValues?.getOrNull(1)?.toLongOrNull()
+                    Regex("\"expires_in\"\\s*:\\s*(\\d+)").find(text)?.groupValues?.getOrNull(1)?.toLongOrNull()
                 if (!token.isNullOrBlank() && expiresIn != null) token to expiresIn else null
             }
         } catch (_: Throwable) {
@@ -436,7 +435,6 @@ object BoxArtFetcher {
     }
 
     private fun firstJsonObject(jsonArrayText: String): String? {
-        // Very naive: find first {...} block
         val start = jsonArrayText.indexOf('{')
         if (start < 0) return null
         var level = 0
@@ -454,13 +452,12 @@ object BoxArtFetcher {
     }
 
     private fun extractNumberField(obj: String, field: String): Long? {
-        val r = Regex("\\\"" + field + "\\\"\\s*:\\s*(-?\\d+)")
+        val r = Regex("\"" + field + "\"\\s*:\\s*(-?\\d+)")
         val m = r.find(obj) ?: return null
         return m.groupValues.getOrNull(1)?.toLongOrNull()
     }
 
     private fun extractStringField(obj: String, field: String): String? {
-        // Match JSON string allowing escaped quotes/backslashes, then unescape JSON and HTML entities
         val r = Regex(""""$field"\s*:\s*"((?:\\.|[^"\\])*)"""")
         val raw = r.find(obj)?.groupValues?.getOrNull(1) ?: return null
         return decodeText(raw)
@@ -589,16 +586,6 @@ object BoxArtFetcher {
                 val bytes = input.readAllBytesCompat()
                 if (bytes.isEmpty()) null else bytes
             }
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
-    private fun downloadImage(urlStr: String): ImageBitmap? {
-        val bytes = downloadImageBytes(urlStr) ?: return null
-        return try {
-            val img: BufferedImage = ImageIO.read(bytes.inputStream()) ?: return null
-            img.toComposeImageBitmap()
         } catch (_: Throwable) {
             null
         }

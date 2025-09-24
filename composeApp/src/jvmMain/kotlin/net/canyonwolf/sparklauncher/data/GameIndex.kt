@@ -9,7 +9,7 @@ import java.time.Instant
 import kotlin.io.path.isDirectory
 import kotlin.io.path.name
 
-enum class LauncherType { STEAM, EA, BATTLENET, UBISOFT }
+enum class LauncherType { STEAM, EA, BATTLENET, UBISOFT, CUSTOM }
 
 data class GameEntry(
     val launcher: LauncherType,
@@ -143,6 +143,9 @@ object GameIndexManager {
         val ubiBases =
             (if (config.ubisoftLibraries.isNotEmpty()) config.ubisoftLibraries else listOfNotNull(config.ubisoftPath.takeIf { it.isNotBlank() }))
                 .mapNotNull { it.takeIf { it.isNotBlank() }?.let { Paths.get(it) } }
+        val customBases =
+            config.customLibraries
+                .mapNotNull { it.takeIf { it.isNotBlank() }?.let { Paths.get(it) } }
 
         steamBases.forEach { base ->
             addFromBase(base, LauncherType.STEAM, restrictToSteamCommon = true)
@@ -184,6 +187,11 @@ object GameIndexManager {
                 }
             }
             addFromBase(ubiPath, LauncherType.UBISOFT)
+        }
+
+        // Custom: user-defined base folders where each subdirectory is a game with an exe inside
+        customBases.forEach { base ->
+            addFromBase(base, LauncherType.CUSTOM)
         }
 
         // Sort entries by launcher then name for consistency

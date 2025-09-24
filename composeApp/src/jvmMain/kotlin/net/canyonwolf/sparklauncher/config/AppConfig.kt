@@ -7,25 +7,25 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
- * Simple app configuration holder and loader.
- * Currently supports only the base theme name.
+ * App configuration
  */
 data class AppConfig(
     val theme: String = "Default",
-    // Legacy single-path fields (kept for backward compatibility)
     val steamPath: String = "",
     val eaPath: String = "",
     val battleNetPath: String = "",
     val ubisoftPath: String = "",
-    // New multi-library support (up to 5 per platform)
     val steamLibraries: List<String> = emptyList(),
     val eaLibraries: List<String> = emptyList(),
     val battleNetLibraries: List<String> = emptyList(),
     val ubisoftLibraries: List<String> = emptyList(),
+    val customLibraries: List<String> = emptyList(),
     val igdbClientId: String = "",
     val igdbClientSecret: String = "",
     val windowWidth: Int = 0,
     val windowHeight: Int = 0,
+    val showUncategorizedTitles: Boolean = true,
+    val showGamesInMultipleCategories: Boolean = true,
 )
 
 object ConfigManager {
@@ -39,17 +39,17 @@ object ConfigManager {
                 allBlank(cfg.eaLibraries) &&
                 allBlank(cfg.battleNetLibraries) &&
                 allBlank(cfg.ubisoftLibraries) &&
+                allBlank(cfg.customLibraries) &&
                 cfg.igdbClientId.isBlank() &&
                 cfg.igdbClientSecret.isBlank()
     }
     private const val APP_FOLDER = "SparkLauncher"
     private const val CONFIG_FILE_NAME = "config.json"
 
-    // Test hook to override base directory in unit tests
     @Volatile
     internal var appDataDirOverride: Path? = null
 
-    /** Returns path to %APPDATA%/SparkLauncher on Windows. */
+    /** Returns a path to %APPDATA%/SparkLauncher on Windows. */
     private fun getAppDataDir(): Path {
         appDataDirOverride?.let { return it.resolve(APP_FOLDER) }
         val appDataEnv = System.getenv("APPDATA")
@@ -61,7 +61,7 @@ object ConfigManager {
     private fun getConfigFilePath(): Path = getAppDataDir().resolve(CONFIG_FILE_NAME)
 
     /**
-     * Load configuration from config.json. If directory or file do not exist, create them with defaults.
+     * Load configuration from config.json. If a directory or file does not exist, create them with default values.
      */
     fun loadOrCreateDefault(): AppConfig {
         val dir = getAppDataDir()
@@ -78,7 +78,6 @@ object ConfigManager {
             val content = Files.readAllLines(file, StandardCharsets.UTF_8).joinToString("\n")
             return fromJson(content)
         } catch (e: IOException) {
-            // On any failure, ensure we at least return defaults
             return AppConfig()
         } catch (e: SecurityException) {
             return AppConfig()
@@ -113,18 +112,19 @@ object ConfigManager {
             append("\n  \"eaLibraries\": ").append(arr(config.eaLibraries)).append(",")
             append("\n  \"battleNetLibraries\": ").append(arr(config.battleNetLibraries)).append(",")
             append("\n  \"ubisoftLibraries\": ").append(arr(config.ubisoftLibraries)).append(",")
+            append("\n  \"customLibraries\": ").append(arr(config.customLibraries)).append(",")
             append("\n  \"igdbClientId\": \"").append(esc(config.igdbClientId)).append("\",")
             append("\n  \"igdbClientSecret\": \"").append(esc(config.igdbClientSecret)).append("\",")
             append("\n  \"windowWidth\": ").append(config.windowWidth).append(",")
-            append("\n  \"windowHeight\": ").append(config.windowHeight).append("\n")
+            append("\n  \"windowHeight\": ").append(config.windowHeight).append(",")
+            append("\n  \"showUncategorizedTitles\": ").append(config.showUncategorizedTitles).append(",")
+            append("\n  \"showGamesInMultipleCategories\": ").append(config.showGamesInMultipleCategories).append("\n")
             append("}")
         }
     }
 
     private fun fromJson(json: String): AppConfig {
-        // Naive parser tolerant to missing fields
         fun unesc(s: String): String {
-            // Minimal JSON unescape for the fields we emit: handles escaped quotes and backslashes
             return s
                 .replace("\\\"", "\"")
                 .replace("\\\\", "\\")
@@ -137,7 +137,7 @@ object ConfigManager {
         fun extractArray(key: String): List<String> {
             val r = Regex("\"$key\"\\s*:\\s*\\[(.*?)]", setOf(RegexOption.DOT_MATCHES_ALL))
             val body = r.find(json)?.groupValues?.get(1) ?: return emptyList()
-            return if (body.isBlank()) emptyList() else body.split(Regex(",(?=(?:[^\\\"]*\\\"[^\\\"]*\\\")*[^\\\"]*$)"))
+            return if (body.isBlank()) emptyList() else body.split(Regex(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"))
                 .map { it.trim().trim('"') }.map { unesc(it) }
         }
 
@@ -151,11 +151,21 @@ object ConfigManager {
         val eaLibs = extractArray("eaLibraries")
         val bnetLibs = extractArray("battleNetLibraries")
         val ubiLibs = extractArray("ubisoftLibraries")
+        val customLibs = extractArray("customLibraries")
         val igdbIdRaw = extractRaw("igdbClientId")
         val igdbSecretRaw = extractRaw("igdbClientSecret")
         fun extractInt(key: String): Int {
             val r = Regex("\"$key\"\\s*:\\s*(-?\\d+)")
             return r.find(json)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        }
+        fun extractBool(key: String, default: Boolean): Boolean {
+            val r = Regex("\"$key\"\\s*:\\s*(true|false)", setOf())
+            val m = r.find(json)?.groupValues?.get(1)
+            return when (m) {
+                "true" -> true
+                "false" -> false
+                else -> default
+            }
         }
 
         val winW = extractInt("windowWidth")
@@ -176,10 +186,13 @@ object ConfigManager {
             eaLibraries = eaLibraries.map { unesc(it) },
             battleNetLibraries = battleNetLibraries.map { unesc(it) },
             ubisoftLibraries = ubisoftLibraries.map { unesc(it) },
+            customLibraries = customLibs.map { unesc(it) },
             igdbClientId = unesc(igdbIdRaw),
             igdbClientSecret = unesc(igdbSecretRaw),
             windowWidth = winW,
             windowHeight = winH,
+            showUncategorizedTitles = extractBool("showUncategorizedTitles", true),
+            showGamesInMultipleCategories = extractBool("showGamesInMultipleCategories", false),
         )
     }
 }

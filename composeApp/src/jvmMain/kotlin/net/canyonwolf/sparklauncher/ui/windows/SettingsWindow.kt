@@ -27,6 +27,7 @@ fun SettingsWindow(
     onReloadLibraries: () -> Unit,
     onRebuildCaches: () -> Unit,
     onThemeChanged: (String) -> Unit = {},
+    onConfigChanged: () -> Unit = {},
 ) {
     if (isOpen) {
         Window(
@@ -71,8 +72,18 @@ fun SettingsWindow(
                     addAll(src.ifEmpty { listOf("") })
                 }
             }
+            val customLibs = remember {
+                mutableStateListOf<String>().apply {
+                    val src = currentConfig.customLibraries
+                    addAll((if (src.isNotEmpty()) src else listOf("")))
+                }
+            }
             var igdbClientId by remember { mutableStateOf(currentConfig.igdbClientId) }
             var igdbClientSecret by remember { mutableStateOf(currentConfig.igdbClientSecret) }
+
+            // Home settings
+            var showUncategorizedTitles by remember { mutableStateOf(currentConfig.showUncategorizedTitles) }
+            var showGamesInMultipleCategories by remember { mutableStateOf(currentConfig.showGamesInMultipleCategories) }
 
             // Available themes
             val themes = remember { listOf("Default", "Light") }
@@ -110,6 +121,7 @@ fun SettingsWindow(
                                     val eaList = norm(eaLibs)
                                     val bnetList = norm(bnetLibs)
                                     val ubiList = norm(ubiLibs)
+                                    val customList = norm(customLibs)
                                     // Save to config (keep legacy single fields from the first element, or empty)
                                     val newConfig = AppConfig(
                                         theme = selectedTheme,
@@ -121,13 +133,17 @@ fun SettingsWindow(
                                         eaLibraries = eaList,
                                         battleNetLibraries = bnetList,
                                         ubisoftLibraries = ubiList,
+                                        customLibraries = customList,
                                         igdbClientId = igdbClientId,
                                         igdbClientSecret = igdbClientSecret,
                                         windowWidth = currentConfig.windowWidth,
                                         windowHeight = currentConfig.windowHeight,
+                                        showUncategorizedTitles = showUncategorizedTitles,
+                                        showGamesInMultipleCategories = showGamesInMultipleCategories,
                                     )
                                     ConfigManager.save(newConfig)
                                     onThemeChanged(selectedTheme)
+                                    onConfigChanged()
                                     onCloseRequest()
                                 }) {
                                     Text("Save")
@@ -231,6 +247,39 @@ fun SettingsWindow(
 
                                     Spacer(Modifier.height(24.dp))
 
+                                    // Home Section
+                                    Text(
+                                        text = "Home",
+                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    SectionCard {
+                                        Column(
+                                            Modifier.fillMaxWidth().padding(16.dp),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Checkbox(
+                                                    checked = showUncategorizedTitles,
+                                                    onCheckedChange = { showUncategorizedTitles = it }
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text("Show Uncategorized Titles")
+                                            }
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Checkbox(
+                                                    checked = showGamesInMultipleCategories,
+                                                    onCheckedChange = { showGamesInMultipleCategories = it }
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text("Show Games in Multiple Categories")
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(24.dp))
+
                                     // Libraries Section
                                     Text(
                                         text = "Libraries",
@@ -247,6 +296,7 @@ fun SettingsWindow(
                                             MultiLibraryPicker(label = "EA", libraries = eaLibs)
                                             MultiLibraryPicker(label = "Battle.Net", libraries = bnetLibs)
                                             MultiLibraryPicker(label = "Ubisoft", libraries = ubiLibs)
+                                            MultiLibraryPicker(label = "Custom", libraries = customLibs)
 
                                             // Bottom actions inside Libraries section
                                             Spacer(Modifier.height(8.dp))

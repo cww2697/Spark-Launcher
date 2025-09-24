@@ -21,6 +21,7 @@ kotlin {
             implementation(compose.components.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
+            implementation(compose.materialIconsExtended)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -32,7 +33,7 @@ kotlin {
     }
 }
 
-version = "1.2.0"
+version = "1.3.0"
 
 tasks.withType(Jar::class.java).configureEach {
     manifest {
