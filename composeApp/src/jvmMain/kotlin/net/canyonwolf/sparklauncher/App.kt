@@ -12,12 +12,15 @@ import androidx.compose.ui.Modifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.canyonwolf.sparklauncher.data.ExeSelectionStore
 import net.canyonwolf.sparklauncher.data.GameIndex
 import net.canyonwolf.sparklauncher.data.GameIndexManager
 import net.canyonwolf.sparklauncher.ui.components.TopMenuBar
 import net.canyonwolf.sparklauncher.ui.screens.HomeScreen
 import net.canyonwolf.sparklauncher.ui.screens.LibraryScreen
 import net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher
+import net.canyonwolf.sparklauncher.ui.windows.ExeChoiceItem
+import net.canyonwolf.sparklauncher.ui.windows.ExeSelectionWindow
 import net.canyonwolf.sparklauncher.ui.windows.SettingsWindow
 
 private enum class Screen { Home, Library }
@@ -41,7 +44,9 @@ fun App() {
     LaunchedEffect(appConfig) {
         scope.launch(Dispatchers.IO) {
             val idx = GameIndexManager.loadOrScan(appConfig)
-            withContext(Dispatchers.Main) { gameIndex = idx }
+            withContext(Dispatchers.Main) {
+                gameIndex = idx
+            }
             BoxArtFetcher.prefetchAll(idx.entries.map { it.toIgdbQueryName() })
             val launchersPresent = idx.entries.map { it.launcher }.toSet()
             val needsBuild = launchersPresent.any { lt ->
@@ -56,6 +61,74 @@ fun App() {
     }
 
     net.canyonwolf.sparklauncher.ui.theme.AppTheme(themeName = themeName) {
+        var isExeWindowOpen by remember { mutableStateOf(false) }
+        var exeChoiceItems by remember { mutableStateOf(listOf<ExeChoiceItem>()) }
+
+        fun refreshExeChoices(idx: GameIndex) {
+            fun normalizeNameForMatch(s: String): String = s.lowercase().filter { it.isLetterOrDigit() }
+
+            val autoSelections = mutableListOf<Pair<String, String>>() // dirPath to exePath
+            val items = idx.entries.mapNotNull { e ->
+                // Battle.net special-case: For MWIII always use battlenet protocol; do not auto-select or show popup
+                if (e.launcher == net.canyonwolf.sparklauncher.data.LauncherType.BATTLENET &&
+                    e.name.equals("Call of Duty Modern Warfare III", ignoreCase = true)
+                ) {
+                    return@mapNotNull null
+                }
+
+                val selected = ExeSelectionStore.get(e.dirPath)
+                val candidates = GameIndexManager.findExeCandidates(e.dirPath)
+                if (selected.isNullOrBlank()) {
+                    // Battle.net special-case: MW2 Campaign Remastered should always use the launcher exe
+                    val mw2Special: String? = if (
+                        e.launcher == net.canyonwolf.sparklauncher.data.LauncherType.BATTLENET &&
+                        e.name.equals("Call of Duty Modern Warfare 2 Campaign Remastered", ignoreCase = true)
+                    ) {
+                        candidates.firstOrNull {
+                            it.endsWith(
+                                "MW2 Campaign Remastered Launcher.exe",
+                                ignoreCase = true
+                            )
+                        }
+                    } else null
+
+                    val bestByName: String? = if (mw2Special == null) {
+                        val target = normalizeNameForMatch(e.name)
+                        candidates.firstOrNull { cand ->
+                            val file = java.nio.file.Paths.get(cand).fileName.toString()
+                            val base = if (file.endsWith(".exe", ignoreCase = true)) file.substring(
+                                0,
+                                file.length - 4
+                            ) else file
+                            normalizeNameForMatch(base) == target
+                        }
+                    } else null
+
+                    val chosen = mw2Special ?: bestByName
+                    if (!chosen.isNullOrBlank()) {
+                        ExeSelectionStore.put(e.dirPath, chosen)
+                        autoSelections.add(e.dirPath to chosen)
+                        null
+                    } else if (candidates.size > 1) {
+                        ExeChoiceItem(gameName = e.name, dirPath = e.dirPath, candidates = candidates)
+                    } else null
+                } else null
+            }
+
+            // Apply auto-selections to in-memory index and persist, so popup won’t show next time
+            if (autoSelections.isNotEmpty()) {
+                val updatedEntries = gameIndex.entries.map { ge ->
+                    autoSelections.firstOrNull { it.first == ge.dirPath }?.let { (_, exe) -> ge.copy(exePath = exe) }
+                        ?: ge
+                }
+                val updated = gameIndex.copy(entries = updatedEntries)
+                gameIndex = updated
+                GameIndexManager.save(updated)
+            }
+
+            exeChoiceItems = items
+            isExeWindowOpen = items.isNotEmpty()
+        }
         var currentScreen by remember { mutableStateOf(Screen.Home) }
         var isSettingsOpen by remember { mutableStateOf(false) }
         val homeScrollState = remember { androidx.compose.foundation.ScrollState(0) }
@@ -64,8 +137,13 @@ fun App() {
         var configVersion by remember { mutableStateOf(0) }
         fun libraryReload() {
             scope.launch(Dispatchers.IO) {
+                // Reset Home screen layout order on library rebuild
+                net.canyonwolf.sparklauncher.data.HomeLayoutStore.setOrder(emptyList())
                 val idx = GameIndexManager.rescanAndSave(appConfig)
-                withContext(Dispatchers.Main) { gameIndex = idx }
+                withContext(Dispatchers.Main) {
+                    gameIndex = idx
+                    refreshExeChoices(idx)
+                }
                 BoxArtFetcher.prefetchAll(idx.entries.map { it.toIgdbQueryName() })
                 BoxArtFetcher.prefetchMetadataAll(idx.entries.map { it.launcher to it.toIgdbQueryName() })
             }
@@ -86,6 +164,27 @@ fun App() {
             },
             onThemeChanged = { newTheme -> themeName = newTheme },
             onConfigChanged = { configVersion++ }
+        )
+
+        // Executable selection popup for ambiguous games
+        LaunchedEffect(gameIndex) {
+            refreshExeChoices(gameIndex)
+        }
+        ExeSelectionWindow(
+            isOpen = isExeWindowOpen,
+            items = exeChoiceItems,
+            onCloseRequest = { isExeWindowOpen = false },
+            onSelection = { dirPath, exePath ->
+                val updatedEntries = gameIndex.entries.map { e ->
+                    if (e.dirPath == dirPath) e.copy(exePath = exePath) else e
+                }
+                val updated = gameIndex.copy(entries = updatedEntries)
+                gameIndex = updated
+                // Persist updated index
+                GameIndexManager.save(updated)
+                // Refresh; window auto-closes if nothing pending
+                refreshExeChoices(updated)
+            }
         )
 
         Scaffold(

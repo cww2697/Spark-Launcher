@@ -19,9 +19,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.canyonwolf.sparklauncher.data.FavoritesStore
 import net.canyonwolf.sparklauncher.data.GameEntry
 import net.canyonwolf.sparklauncher.data.LauncherType
 import net.canyonwolf.sparklauncher.data.UserDataStore
@@ -115,6 +117,8 @@ fun LibraryScreen(
     // Track if the selected game's process is currently running
     var isRunning by remember(selected) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    // Favorites state
+    var favorites by remember { mutableStateOf(FavoritesStore.getAll()) }
 
     // Apply preselected only when provided; do not reset selection on later recompositions
     LaunchedEffect(preselected) {
@@ -216,6 +220,15 @@ fun LibraryScreen(
     Row(Modifier.fillMaxSize()) {
         // Left navigation list
         Surface(tonalElevation = 1.dp, modifier = Modifier.width(300.dp).fillMaxHeight()) {
+            // Compute favorites shown set based on current filter
+            val favEntries = entries.filter { favorites.contains(it.dirPath) }
+            val favShown = if (searchQuery.isBlank()) favEntries else favEntries.filter {
+                it.name.contains(
+                    searchQuery,
+                    ignoreCase = true
+                )
+            }
+            val favShownDirSet = favShown.map { it.dirPath }.toSet()
             LazyColumn(Modifier.fillMaxSize().padding(vertical = 8.dp)) {
                 item(key = "search-bar") {
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
@@ -273,10 +286,36 @@ fun LibraryScreen(
                     }
                 }
 
+                // Favorites section (if any)
+                run {
+                    if (favShown.isNotEmpty()) {
+                        item(key = "header-favorites") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("★", modifier = Modifier.width(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "Favorites (" + favShown.size + ")",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+                        items(favShown, key = { "FAV:${it.launcher}:${it.exePath}" }) { e ->
+                            GameListItem(
+                                entry = e,
+                                selected = selected?.exePath == e.exePath,
+                                onClick = { selected = e }
+                            )
+                        }
+                    }
+                }
+                
                 launchersInOrder.forEach { launcher ->
                     val originalList = grouped[launcher].orEmpty()
                     if (originalList.isEmpty()) return@forEach
-                    val shownList = filteredGrouped[launcher].orEmpty()
+                    val shownList = filteredGrouped[launcher].orEmpty().filter { !favShownDirSet.contains(it.dirPath) }
 
                     item(key = "header-${launcher.name}") {
                         LauncherHeader(
@@ -428,6 +467,21 @@ fun LibraryScreen(
                                         color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.weight(1f)
                                     )
+                                    // Favorite star toggle
+                                    val dirPath = selected?.dirPath ?: ""
+                                    val isFav = favorites.contains(dirPath)
+                                    IconButton(
+                                        onClick = {
+                                            if (dirPath.isNotBlank()) {
+                                                val nowFav = FavoritesStore.toggle(dirPath)
+                                                favorites = if (nowFav) favorites + dirPath else favorites - dirPath
+                                            }
+                                        },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Text(text = if (isFav) "★" else "☆", fontSize = 28.sp)
+                                    }
+                                    Spacer(Modifier.width(8.dp))
                                     Button(
                                         onClick = {
                                             val e = selected
