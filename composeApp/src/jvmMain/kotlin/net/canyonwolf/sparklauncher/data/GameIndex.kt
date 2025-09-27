@@ -102,9 +102,40 @@ object GameIndexManager {
             try {
                 Files.list(scanRoot).use { stream ->
                     stream.filter { it.isDirectory() }.forEach { gameDir ->
-                        // Inside each gameDir, find a .exe (first match)
-                        val exe = findFirstExe(gameDir)
-                        if (exe != null) {
+                        // Inside each gameDir, gather .exe candidates and prefer user selection if present
+                        val candidates = findExeCandidates(gameDir)
+                        val selectedFromStore = ExeSelectionStore.get(gameDir.toString())
+
+                        // Special-case: For Battle.net title "Call of Duty Modern Warfare 2 Campaign Remastered",
+                        // always use the "MW2 Campaign Remastered Launcher.exe" if present.
+                        val mw2RemasteredSpecial: Path? = run {
+                            if (launcher == LauncherType.BATTLENET && gameDir.name.equals(
+                                    "Call of Duty Modern Warfare 2 Campaign Remastered",
+                                    ignoreCase = true
+                                )
+                            ) {
+                                candidates.firstOrNull {
+                                    it.fileName.toString()
+                                        .equals("MW2 Campaign Remastered Launcher.exe", ignoreCase = true)
+                                }
+                            } else null
+                        }
+
+                        val bestByName: Path? =
+                            if (mw2RemasteredSpecial == null) matchExeByGameName(gameDir.name, candidates) else null
+
+                        val chosen = when {
+                            // Stored user selection wins unless overridden by special Battle.net rule above
+                            !selectedFromStore.isNullOrBlank() && mw2RemasteredSpecial == null -> Paths.get(
+                                selectedFromStore
+                            )
+
+                            mw2RemasteredSpecial != null -> mw2RemasteredSpecial
+                            bestByName != null -> bestByName
+                            candidates.isNotEmpty() -> candidates.first()
+                            else -> null
+                        }
+                        if (chosen != null) {
                             val name = gameDir.name
                             // Special-case: For Battle.net title "Call of Duty Modern Warfare III",
                             // use a custom protocol path to ensure proper launching via Battle.net.
@@ -112,7 +143,7 @@ object GameIndexManager {
                                 if (launcher == LauncherType.BATTLENET && name == "Call of Duty Modern Warfare III") {
                                     "battlenet://game/pinta"
                                 } else {
-                                    exe.toString()
+                                    chosen.toString()
                                 }
                             result.add(
                                 GameEntry(
@@ -197,6 +228,59 @@ object GameIndexManager {
         // Sort entries by launcher then name for consistency
         val sorted = result.sortedWith(compareBy<GameEntry> { it.launcher.name }.thenBy { it.name.lowercase() })
         return GameIndex(entries = sorted)
+    }
+
+    fun findExeCandidates(dirPath: String): List<String> {
+        return try {
+            val p = Paths.get(dirPath)
+            findExeCandidates(p).map { it.toString() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun findExeCandidates(dir: Path): List<Path> {
+        val found = mutableListOf<Path>()
+        try {
+            // depth 1 files
+            Files.list(dir).use { s ->
+                s.filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".exe", ignoreCase = true) }
+                    .forEach { p -> found.add(p) }
+            }
+            // Also check one level deeper (commonly bin/ or game/ subfolders)
+            Files.list(dir).use { s ->
+                s.filter { it.isDirectory() }.forEach { sub ->
+                    try {
+                        Files.list(sub).use { s2 ->
+                            s2.filter {
+                                Files.isRegularFile(it) && it.fileName.toString().endsWith(".exe", ignoreCase = true)
+                            }
+                                .forEach { p -> found.add(p) }
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        } catch (_: IOException) {
+        }
+        return found
+    }
+
+    private fun normalizeNameForMatch(s: String): String {
+        // Lowercase and remove all non-alphanumeric characters for loose comparison
+        return s.lowercase().filter { it.isLetterOrDigit() }
+    }
+
+    private fun matchExeByGameName(gameName: String, candidates: List<Path>): Path? {
+        if (candidates.isEmpty()) return null
+        val target = normalizeNameForMatch(gameName)
+        for (p in candidates) {
+            val file = p.fileName.toString()
+            val nameNoExt = if (file.endsWith(".exe", ignoreCase = true)) file.substring(0, file.length - 4) else file
+            val normalized = normalizeNameForMatch(nameNoExt)
+            if (normalized == target) return p
+        }
+        return null
     }
 
     private fun findFirstExe(dir: Path): Path? {

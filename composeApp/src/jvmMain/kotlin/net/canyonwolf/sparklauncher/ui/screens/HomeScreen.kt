@@ -3,10 +3,7 @@ package net.canyonwolf.sparklauncher.ui.screens
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -44,6 +41,7 @@ private suspend fun animateByCards(state: LazyListState, cards: Int, direction: 
     state.animateScrollBy(distance)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     entries: List<GameEntry>,
@@ -86,7 +84,24 @@ fun HomeScreen(
         // Convert to immutable lists
         map.mapValues { it.value.toList() }
     }
-    val genreOrder = remember(genreGroups) { genreGroups.keys.sorted() }
+
+    // Section order state: merge saved order with current genres
+    val savedOrder = remember(genreGroups) { net.canyonwolf.sparklauncher.data.HomeLayoutStore.getOrder() }
+    val sectionOrder = remember(genreGroups, savedOrder) {
+        val available = genreGroups.keys.toList()
+        val fromSave = savedOrder.filter { it in available }
+        val remaining = available.filter { it !in fromSave }.sorted()
+        mutableStateListOf<String>().apply { addAll(fromSave + remaining) }
+    }
+
+    // Helper to persist current order
+    fun persistOrder() {
+        net.canyonwolf.sparklauncher.data.HomeLayoutStore.setOrder(sectionOrder)
+    }
+
+    // Drag state for reordering
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    with(density) { 280.dp.toPx() } // approx section height + spacing
 
     if ((metadataLoading || imagesPrefetching) && entries.isNotEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -97,54 +112,66 @@ fun HomeScreen(
             }
         }
     } else {
-        val vScroll = scrollState ?: rememberScrollState()
+        // Use LazyColumn so item reorders can animate smoothly via animateItemPlacement
+        val listState = rememberLazyListState()
+        rememberCoroutineScope()
+        remember { mutableStateMapOf<String, Int>() }
         Box(Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(vScroll)) {
-                if (isConfigEmpty) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        tonalElevation = 2.dp,
-                        shadowElevation = 0.dp,
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(16.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item(key = "config-empty-banner") {
+                    if (isConfigEmpty) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            tonalElevation = 2.dp,
+                            shadowElevation = 0.dp,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Welcome!",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(Modifier.height(6.dp))
-                                Text(
-                                    "Your configuration looks empty. Open Settings to connect your launchers and set IGDB credentials.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
-                                )
-                            }
-                            androidx.compose.material3.Button(onClick = { onOpenSettings?.invoke() }) {
-                                Text("Open Settings")
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Welcome!",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        "Your configuration looks empty. Open Settings to connect your launchers and set IGDB credentials.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                    )
+                                }
+                                androidx.compose.material3.Button(onClick = { onOpenSettings?.invoke() }) {
+                                    Text("Open Settings")
+                                }
                             }
                         }
                     }
                 }
-                genreOrder.forEach { genre ->
+                itemsIndexed(sectionOrder, key = { _, k -> k }) { idx, genre ->
                     val list = genreGroups[genre].orEmpty()
-                    if (list.isEmpty()) return@forEach
-                    CarouselSection(title = genre, items = list, onOpenGame = onOpenGame)
-                    Spacer(Modifier.height(24.dp))
+                    if (list.isEmpty()) return@itemsIndexed
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        CarouselSection(title = genre, items = list, onOpenGame = onOpenGame)
+                        Spacer(Modifier.height(24.dp))
+                    }
                 }
             }
-            if (vScroll.maxValue > 0) {
-                VerticalScrollbar(
-                    adapter = rememberScrollbarAdapter(vScroll),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
-                )
-            }
+            // Vertical scrollbar for LazyColumn
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+            )
         }
     }
 }

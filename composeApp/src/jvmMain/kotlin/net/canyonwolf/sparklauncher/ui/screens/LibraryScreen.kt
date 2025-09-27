@@ -19,12 +19,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import net.canyonwolf.sparklauncher.data.GameEntry
-import net.canyonwolf.sparklauncher.data.LauncherType
-import net.canyonwolf.sparklauncher.data.UserDataStore
+import net.canyonwolf.sparklauncher.data.*
 import net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher
 
 @Composable
@@ -33,7 +32,8 @@ fun LibraryScreen(
     preselected: GameEntry? = null,
     onReloadLibraries: (() -> Unit)? = null,
     isConfigEmpty: Boolean = false,
-    onOpenSettings: (() -> Unit)? = null
+    onOpenSettings: (() -> Unit)? = null,
+    configVersion: Int = 0,
 ) {
     val grouped: Map<LauncherType, List<GameEntry>> = remember(entries) {
         entries.groupBy { it.launcher }
@@ -115,6 +115,9 @@ fun LibraryScreen(
     // Track if the selected game's process is currently running
     var isRunning by remember(selected) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    // Favorites state
+    var favorites by remember { mutableStateOf(FavoritesStore.getAll()) }
+    var showRunConfigDialog by remember { mutableStateOf(false) }
 
     // Apply preselected only when provided; do not reset selection on later recompositions
     LaunchedEffect(preselected) {
@@ -213,9 +216,21 @@ fun LibraryScreen(
         }
     }
 
+    val config = remember(configVersion) { net.canyonwolf.sparklauncher.config.ConfigManager.loadOrCreateDefault() }
+    val datePattern = config.dateTimeFormatPattern.ifBlank { "MMM d, yyyy h:mm a" }
+
     Row(Modifier.fillMaxSize()) {
         // Left navigation list
         Surface(tonalElevation = 1.dp, modifier = Modifier.width(300.dp).fillMaxHeight()) {
+            // Compute favorites shown set based on current filter
+            val favEntries = entries.filter { favorites.contains(it.dirPath) }
+            val favShown = if (searchQuery.isBlank()) favEntries else favEntries.filter {
+                it.name.contains(
+                    searchQuery,
+                    ignoreCase = true
+                )
+            }
+            val favShownDirSet = favShown.map { it.dirPath }.toSet()
             LazyColumn(Modifier.fillMaxSize().padding(vertical = 8.dp)) {
                 item(key = "search-bar") {
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
@@ -273,10 +288,36 @@ fun LibraryScreen(
                     }
                 }
 
+                // Favorites section (if any)
+                run {
+                    if (favShown.isNotEmpty()) {
+                        item(key = "header-favorites") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("★", modifier = Modifier.width(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "Favorites (" + favShown.size + ")",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+                        items(favShown, key = { "FAV:${it.launcher}:${it.exePath}" }) { e ->
+                            GameListItem(
+                                entry = e,
+                                selected = selected?.exePath == e.exePath,
+                                onClick = { selected = e }
+                            )
+                        }
+                    }
+                }
+                
                 launchersInOrder.forEach { launcher ->
                     val originalList = grouped[launcher].orEmpty()
                     if (originalList.isEmpty()) return@forEach
-                    val shownList = filteredGrouped[launcher].orEmpty()
+                    val shownList = filteredGrouped[launcher].orEmpty().filter { !favShownDirSet.contains(it.dirPath) }
 
                     item(key = "header-${launcher.name}") {
                         LauncherHeader(
@@ -428,6 +469,21 @@ fun LibraryScreen(
                                         color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.weight(1f)
                                     )
+                                    // Favorite star toggle
+                                    val dirPath = selected?.dirPath ?: ""
+                                    val isFav = favorites.contains(dirPath)
+                                    IconButton(
+                                        onClick = {
+                                            if (dirPath.isNotBlank()) {
+                                                val nowFav = FavoritesStore.toggle(dirPath)
+                                                favorites = if (nowFav) favorites + dirPath else favorites - dirPath
+                                            }
+                                        },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Text(text = if (isFav) "★" else "☆", fontSize = 28.sp)
+                                    }
+                                    Spacer(Modifier.width(8.dp))
                                     Button(
                                         onClick = {
                                             val e = selected
@@ -475,9 +531,141 @@ fun LibraryScreen(
                                 )
                             }
                             Spacer(Modifier.width(16.dp))
-                            // Right-side stats card
-                            Box(modifier = Modifier.width(260.dp).fillMaxHeight()) {
-                                PlayStatsCard(playStats)
+                            // Right-side summary column (Play Stats + actions)
+                            Column(modifier = Modifier.width(260.dp).fillMaxHeight()) {
+                                PlayStatsCard(stats = playStats, dateTimeFormatPattern = datePattern)
+                                Spacer(Modifier.weight(1f))
+                                val sel = selected
+                                // Do not show Run Configuration for Battle.net titles
+                                if (sel != null && sel.launcher != LauncherType.BATTLENET) {
+                                    OutlinedButton(
+                                        onClick = { showRunConfigDialog = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Run Configuration")
+                                    }
+                                    if (showRunConfigDialog) {
+                                        val current = sel
+                                        if (current != null) {
+                                            var exeText by remember(current.dirPath) {
+                                                mutableStateOf(
+                                                    ExeSelectionStore.get(current.dirPath) ?: current.exePath
+                                                )
+                                            }
+                                            var argsText by remember(current.dirPath) {
+                                                mutableStateOf(RunArgsStore.get(current.dirPath) ?: "")
+                                            }
+                                            var useArgs by remember(current.dirPath) {
+                                                mutableStateOf(!RunArgsStore.get(current.dirPath).isNullOrBlank())
+                                            }
+                                            AlertDialog(
+                                                onDismissRequest = { showRunConfigDialog = false },
+                                                title = {
+                                                    Text("Run Configuration")
+                                                },
+                                                text = {
+                                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            OutlinedTextField(
+                                                                value = exeText,
+                                                                onValueChange = { exeText = it },
+                                                                label = { Text("Executable Path") },
+                                                                singleLine = true,
+                                                                modifier = Modifier.weight(1f)
+                                                            )
+                                                            Spacer(Modifier.width(8.dp))
+                                                            Button(onClick = {
+                                                                try {
+                                                                    val chooser = javax.swing.JFileChooser()
+                                                                    chooser.fileSelectionMode =
+                                                                        javax.swing.JFileChooser.FILES_ONLY
+                                                                    chooser.fileFilter =
+                                                                        javax.swing.filechooser.FileNameExtensionFilter(
+                                                                            "Executable files (*.exe)",
+                                                                            "exe"
+                                                                        )
+                                                                    // Preselect to current exe or its directory
+                                                                    try {
+                                                                        val currentPath = exeText
+                                                                        val currentFile =
+                                                                            if (currentPath.isNotBlank()) java.io.File(
+                                                                                currentPath
+                                                                            ) else null
+                                                                        val initialDir = when {
+                                                                            currentFile != null && currentFile.exists() && currentFile.isDirectory -> currentFile
+                                                                            currentFile != null && currentFile.exists() && currentFile.isFile -> currentFile.parentFile
+                                                                            else -> java.io.File(current.dirPath)
+                                                                        }
+                                                                        if (initialDir != null && initialDir.exists() && initialDir.isDirectory) {
+                                                                            chooser.currentDirectory = initialDir
+                                                                        }
+                                                                        if (currentFile != null && currentFile.exists() && currentFile.isFile) {
+                                                                            chooser.selectedFile = currentFile
+                                                                        }
+                                                                    } catch (_: Throwable) {
+                                                                    }
+                                                                    val ret = chooser.showOpenDialog(null)
+                                                                    if (ret == javax.swing.JFileChooser.APPROVE_OPTION) {
+                                                                        exeText = chooser.selectedFile.absolutePath
+                                                                    }
+                                                                } catch (_: Throwable) {
+                                                                }
+                                                            }) {
+                                                                Text("Browse…")
+                                                            }
+                                                        }
+                                                        Spacer(Modifier.height(10.dp))
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Checkbox(
+                                                                checked = useArgs,
+                                                                onCheckedChange = { useArgs = it })
+                                                            Spacer(Modifier.width(6.dp))
+                                                            Text(
+                                                                "Use Custom Launch Options",
+                                                                style = MaterialTheme.typography.labelLarge,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
+                                                        }
+                                                        if (useArgs) {
+                                                            Spacer(Modifier.height(12.dp))
+                                                            OutlinedTextField(
+                                                                value = argsText,
+                                                                onValueChange = { argsText = it },
+                                                                label = { Text("Command-line arguments") },
+                                                                singleLine = false,
+                                                                modifier = Modifier.fillMaxWidth()
+                                                            )
+                                                        }
+                                                    }
+                                                },
+                                                confirmButton = {
+                                                    TextButton(onClick = {
+                                                        if (exeText.isNotBlank()) {
+                                                            ExeSelectionStore.put(current.dirPath, exeText)
+                                                        }
+                                                        if (useArgs) {
+                                                            RunArgsStore.put(current.dirPath, argsText)
+                                                        } else {
+                                                            // Clear saved args when disabled
+                                                            RunArgsStore.put(current.dirPath, "")
+                                                        }
+                                                        showRunConfigDialog = false
+                                                    }) { Text("Save") }
+                                                },
+                                                dismissButton = {
+                                                    TextButton(onClick = {
+                                                        showRunConfigDialog = false
+                                                    }) { Text("Cancel") }
+                                                }
+                                            )
+                                        } else {
+                                            showRunConfigDialog = false
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -550,11 +738,14 @@ private fun GameListItem(entry: GameEntry, selected: Boolean, onClick: () -> Uni
 
 private fun launchGame(entry: GameEntry) {
     try {
-        val path = entry.exePath
+        // Use per-game override if present
+        val exePath = ExeSelectionStore.get(entry.dirPath)?.takeIf { it.isNotBlank() } ?: entry.exePath
+        val args = RunArgsStore.get(entry.dirPath).orEmpty()
+
         // If exePath is a protocol URL (e.g., battlenet://game/pinta), open via Desktop to invoke handler
-        if (path.contains("://")) {
+        if (exePath.contains("://")) {
             try {
-                val uri = java.net.URI(path)
+                val uri = java.net.URI(exePath)
                 if (java.awt.Desktop.isDesktopSupported()) {
                     val d = java.awt.Desktop.getDesktop()
                     if (d.isSupported(java.awt.Desktop.Action.BROWSE)) {
@@ -566,14 +757,45 @@ private fun launchGame(entry: GameEntry) {
                 // fall through to process builder attempt below
             }
         }
-        val exe = java.io.File(path)
+        val exe = java.io.File(exePath)
         val dir = java.io.File(entry.dirPath)
-        val pb = ProcessBuilder(exe.absolutePath)
+        val command = mutableListOf(exe.absolutePath)
+        command.addAll(parseArgsString(args))
+        val pb = ProcessBuilder(command)
         if (dir.exists()) pb.directory(dir)
         pb.start()
     } catch (_: Throwable) {
         // ignore launch errors for now
     }
+}
+
+private fun parseArgsString(s: String): List<String> {
+    if (s.isBlank()) return emptyList()
+    val tokens = mutableListOf<String>()
+    val sb = StringBuilder()
+    var inQuotes = false
+    var i = 0
+    while (i < s.length) {
+        when (val c = s[i]) {
+            '"' -> {
+                inQuotes = !inQuotes
+            }
+
+            ' ' -> {
+                if (inQuotes) sb.append(c) else {
+                    if (sb.isNotEmpty()) {
+                        tokens.add(sb.toString())
+                        sb.setLength(0)
+                    }
+                }
+            }
+
+            else -> sb.append(c)
+        }
+        i++
+    }
+    if (sb.isNotEmpty()) tokens.add(sb.toString())
+    return tokens
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -655,16 +877,16 @@ private fun GenreChip(text: String) {
 }
 
 @Composable
-private fun PlayStatsCard(stats: UserDataStore.PlayStat?) {
+private fun PlayStatsCard(stats: UserDataStore.PlayStat?, dateTimeFormatPattern: String = "MMM d, yyyy h:mm a") {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 2.dp,
         shadowElevation = 0.dp,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Text("Your Play Stats", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
             // Plays count
@@ -682,20 +904,25 @@ private fun PlayStatsCard(stats: UserDataStore.PlayStat?) {
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
             val last = stats?.lastplayed.orEmpty()
-            val shown = remember(last) {
+            val shown = remember(last, dateTimeFormatPattern) {
                 try {
                     if (last.isBlank()) {
                         "Never"
                     } else {
                         val dt = java.time.LocalDateTime.parse(last)
-                        dt.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a"))
+                        val fmt = try {
+                            java.time.format.DateTimeFormatter.ofPattern(dateTimeFormatPattern)
+                        } catch (_: Throwable) {
+                            java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a")
+                        }
+                        dt.format(fmt)
                     }
                 } catch (_: Throwable) {
                     last
                 }
             }
             Text(shown, style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(8.dp))
             Text(
                 "Tip: Stats update when you click Play.",
                 style = MaterialTheme.typography.bodySmall,
