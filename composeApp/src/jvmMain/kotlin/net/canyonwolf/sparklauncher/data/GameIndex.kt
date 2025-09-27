@@ -247,7 +247,6 @@ object GameIndexManager {
                 s.filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".exe", ignoreCase = true) }
                     .forEach { p -> found.add(p) }
             }
-            if (found.isNotEmpty()) return found
             // Also check one level deeper (commonly bin/ or game/ subfolders)
             Files.list(dir).use { s ->
                 s.filter { it.isDirectory() }.forEach { sub ->
