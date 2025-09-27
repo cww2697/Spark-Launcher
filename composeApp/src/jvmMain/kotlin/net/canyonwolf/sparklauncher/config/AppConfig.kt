@@ -26,6 +26,7 @@ data class AppConfig(
     val windowHeight: Int = 0,
     val showUncategorizedTitles: Boolean = true,
     val showGamesInMultipleCategories: Boolean = true,
+    val dateTimeFormatPattern: String = "MMM d, yyyy h:mm a",
 )
 
 object ConfigManager {
@@ -118,7 +119,8 @@ object ConfigManager {
             append("\n  \"windowWidth\": ").append(config.windowWidth).append(",")
             append("\n  \"windowHeight\": ").append(config.windowHeight).append(",")
             append("\n  \"showUncategorizedTitles\": ").append(config.showUncategorizedTitles).append(",")
-            append("\n  \"showGamesInMultipleCategories\": ").append(config.showGamesInMultipleCategories).append("\n")
+            append("\n  \"showGamesInMultipleCategories\": ").append(config.showGamesInMultipleCategories).append(",")
+            append("\n  \"dateTimeFormatPattern\": \"").append(esc(config.dateTimeFormatPattern)).append("\"\n")
             append("}")
         }
     }
@@ -176,6 +178,7 @@ object ConfigManager {
         val battleNetLibraries =
             if (bnetLibs.isNotEmpty()) bnetLibs else listOfNotNull(bnetRaw.takeIf { it.isNotBlank() })
         val ubisoftLibraries = if (ubiLibs.isNotEmpty()) ubiLibs else listOfNotNull(ubiRaw.takeIf { it.isNotBlank() })
+        val dtPatternRaw = extractRaw("dateTimeFormatPattern")
         return AppConfig(
             theme = unesc(themeRaw),
             steamPath = unesc(steamRaw),
@@ -193,6 +196,7 @@ object ConfigManager {
             windowHeight = winH,
             showUncategorizedTitles = extractBool("showUncategorizedTitles", true),
             showGamesInMultipleCategories = extractBool("showGamesInMultipleCategories", false),
+            dateTimeFormatPattern = if (dtPatternRaw.isBlank()) "MMM d, yyyy h:mm a" else unesc(dtPatternRaw),
         )
     }
 }

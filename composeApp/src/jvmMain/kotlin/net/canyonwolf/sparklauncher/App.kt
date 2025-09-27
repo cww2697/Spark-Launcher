@@ -227,7 +227,8 @@ fun App() {
                                 libraryReload()
                             },
                             isConfigEmpty = isConfigEmpty,
-                            onOpenSettings = { isSettingsOpen = true }
+                            onOpenSettings = { isSettingsOpen = true },
+                            configVersion = configVersion
                         )
                         // Clear the pending selection after rendering once
                         if (pendingSelection != null) {

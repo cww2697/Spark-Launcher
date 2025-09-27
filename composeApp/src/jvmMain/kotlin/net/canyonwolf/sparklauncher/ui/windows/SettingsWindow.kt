@@ -85,6 +85,36 @@ fun SettingsWindow(
             var showUncategorizedTitles by remember { mutableStateOf(currentConfig.showUncategorizedTitles) }
             var showGamesInMultipleCategories by remember { mutableStateOf(currentConfig.showGamesInMultipleCategories) }
 
+            // Play Statistics settings
+            var dateTimeFormatPattern by remember { mutableStateOf(currentConfig.dateTimeFormatPattern) }
+            val dateTimeFormatOptions = remember {
+                // Keep internal patterns but present examples to the user (including date-only formats)
+                listOf(
+                    "MMM d, yyyy h:mm a",      // e.g., Sep 27, 2025 5:45 PM
+                    "yyyy-MM-dd HH:mm",        // e.g., 2025-09-27 17:45
+                    "dd/MM/yyyy HH:mm",        // e.g., 27/09/2025 17:45
+                    "EEE, MMM d, yyyy h:mm a", // e.g., Sat, Sep 27, 2025 5:45 PM
+                    "MMM d h:mm a",            // e.g., Sep 27 5:45 PM
+                    // Date-only options (no time)
+                    "MMM d, yyyy",             // e.g., Sep 27, 2025
+                    "yyyy-MM-dd",              // e.g., 2025-09-27
+                    "dd/MM/yyyy",              // e.g., 27/09/2025
+                    "EEE, MMM d, yyyy"         // e.g., Sat, Sep 27, 2025
+                )
+            }
+            val dateExampleForPattern: (String) -> String = remember {
+                { pattern ->
+                    try {
+                        val now = java.time.LocalDateTime.now()
+                        val fmt = java.time.format.DateTimeFormatter.ofPattern(pattern)
+                        now.format(fmt)
+                    } catch (_: Throwable) {
+                        pattern
+                    }
+                }
+            }
+            val currentFormatExample = remember(dateTimeFormatPattern) { dateExampleForPattern(dateTimeFormatPattern) }
+
             // Available themes
             val themes = remember { listOf("Default", "Light") }
             var themeMenuExpanded by remember { mutableStateOf(false) }
@@ -140,6 +170,7 @@ fun SettingsWindow(
                                         windowHeight = currentConfig.windowHeight,
                                         showUncategorizedTitles = showUncategorizedTitles,
                                         showGamesInMultipleCategories = showGamesInMultipleCategories,
+                                        dateTimeFormatPattern = dateTimeFormatPattern,
                                     )
                                     ConfigManager.save(newConfig)
                                     onThemeChanged(selectedTheme)
@@ -338,6 +369,60 @@ fun SettingsWindow(
 
                                     Spacer(Modifier.height(24.dp))
 
+                                    // Play Statistics Section
+                                    Text(
+                                        text = "Play Statistics",
+                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    SectionCard {
+                                        Column(
+                                            Modifier.fillMaxWidth().padding(16.dp),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            var dtMenuExpanded by remember { mutableStateOf(false) }
+                                            Text(
+                                                text = "Last Played date format",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            ExposedDropdownMenuBox(
+                                                expanded = dtMenuExpanded,
+                                                onExpandedChange = { dtMenuExpanded = !dtMenuExpanded }
+                                            ) {
+                                                OutlinedTextField(
+                                                    value = currentFormatExample,
+                                                    onValueChange = {},
+                                                    modifier = Modifier
+                                                        .menuAnchor()
+                                                        .fillMaxWidth(),
+                                                    label = { Text("Date-Time Format") },
+                                                    readOnly = true,
+                                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dtMenuExpanded) },
+                                                    enabled = true
+                                                )
+                                                ExposedDropdownMenu(
+                                                    expanded = dtMenuExpanded,
+                                                    onDismissRequest = { dtMenuExpanded = false },
+                                                    modifier = Modifier.exposedDropdownSize(matchTextFieldWidth = true)
+                                                ) {
+                                                    dateTimeFormatOptions.forEach { option ->
+                                                        DropdownMenuItem(
+                                                            text = { Text(dateExampleForPattern(option)) },
+                                                            onClick = {
+                                                                dateTimeFormatPattern = option
+                                                                dtMenuExpanded = false
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(24.dp))
+
                                     // About Section
                                     Text(
                                         text = "About",
@@ -447,6 +532,17 @@ private fun FilePathPicker(label: String, path: String, onPathChange: (String) -
             FilledTonalButton(onClick = {
                 val chooser = JFileChooser()
                 chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                try {
+                    val currentPath = path
+                    if (currentPath.isNotBlank()) {
+                        val f = java.io.File(currentPath)
+                        val dir = if (f.exists() && f.isDirectory) f else f.parentFile
+                        if (dir != null && dir.exists() && dir.isDirectory) {
+                            chooser.currentDirectory = dir
+                        }
+                    }
+                } catch (_: Throwable) {
+                }
                 val result = chooser.showOpenDialog(null)
                 if (result == JFileChooser.APPROVE_OPTION) {
                     onPathChange(chooser.selectedFile?.absolutePath ?: "")
@@ -497,6 +593,17 @@ private fun MultiLibraryPicker(label: String, libraries: MutableList<String>) {
                     onClick = {
                         val chooser = JFileChooser()
                         chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                        try {
+                            val currentPath = value
+                            if (currentPath.isNotBlank()) {
+                                val f = java.io.File(currentPath)
+                                val dir = if (f.exists() && f.isDirectory) f else f.parentFile
+                                if (dir != null && dir.exists() && dir.isDirectory) {
+                                    chooser.currentDirectory = dir
+                                }
+                            }
+                        } catch (_: Throwable) {
+                        }
                         val result = chooser.showOpenDialog(null)
                         if (result == JFileChooser.APPROVE_OPTION) {
                             val selected = chooser.selectedFile?.absolutePath ?: ""
