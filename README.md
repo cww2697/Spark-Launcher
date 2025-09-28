@@ -2,9 +2,13 @@
 
 [![Automatic Dependency Submission](https://github.com/cww2697/Spark-Launcher/actions/workflows/dependency-graph/auto-submission/badge.svg)](https://github.com/cww2697/Spark-Launcher/actions/workflows/dependency-graph/auto-submission)
 [![CodeQL Advanced](https://github.com/cww2697/Spark-Launcher/actions/workflows/codeql.yml/badge.svg)](https://github.com/cww2697/Spark-Launcher/actions/workflows/codeql.yml)
+[![CI](https://github.com/cww2697/Spark-Launcher/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/cww2697/Spark-Launcher/actions/workflows/ci.yml)
 
 A lightweight desktop game launcher built with Compose Multiplatform for JVM. SparkLauncher aggregates games from
 multiple PC stores into a single library and fetches box art from IGDB so your library looks great.
+
+## Installation
+While an MSI installer is provided the recommended installation is by building from source files during pre-release. 
 
 ## What it does
 
@@ -13,6 +17,7 @@ multiple PC stores into a single library and fetches box art from IGDB so your l
     - EA app (formerly Origin)
     - Battle.net
     - Ubisoft Connect
+    - Custom Libraries
 - Displays a unified Library view with box art and basic game info.
 - Lets you configure where each store is installed so SparkLauncher can discover games.
 - Integrates with IGDB to fetch cover art (requires your own IGDB credentials).
@@ -67,7 +72,7 @@ IGDB uses Twitch authentication. To get credentials:
 ## Build from source
 ### Prerequisites
 
-- JDK 17 or newer (Compose Multiplatform for Desktop requires Java 17+).
+- JDK 21 or newer (Compose Multiplatform for Desktop requires Java 17+).
 - Git (to clone the repository).
 - No global Gradle install is required; the included Gradle Wrapper will be used.
 
@@ -126,4 +131,4 @@ You can edit this file while the app is closed. The Settings window also writes 
     - Ensure IGDB Client ID/Secret are set correctly.
     - Check your network connection and try Rebuild Caches.
 - Build fails with Java version error
-    - Ensure JDK 17+ is installed and selected (JAVA_HOME and PATH).
+    - Ensure JDK 21+ is installed and selected (JAVA_HOME and PATH).
