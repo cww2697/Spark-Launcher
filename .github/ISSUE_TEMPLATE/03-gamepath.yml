@@ -51,7 +51,7 @@ body:
       description: Please confirm if the game will launch with the detected path.
       options:
         - label: The game launches as expected.
-        - required: false
+          required: false
 
   - type: textarea
     id: extra
