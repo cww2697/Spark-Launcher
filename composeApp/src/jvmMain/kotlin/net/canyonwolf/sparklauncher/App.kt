@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.awt.ComposeWindow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,6 +32,10 @@ fun App() {
     val initialConfig = remember { net.canyonwolf.sparklauncher.config.ConfigManager.loadOrCreateDefault() }
     var themeName by remember { mutableStateOf(initialConfig.theme) }
     val appConfig by remember { mutableStateOf(initialConfig) }
+    // Initialize community themes (ensures themes folder/template and loads available themes)
+    LaunchedEffect(Unit) {
+        net.canyonwolf.sparklauncher.ui.theme.ThemeManager.init()
+    }
     val isConfigEmpty by remember(appConfig) {
         mutableStateOf(
             net.canyonwolf.sparklauncher.config.ConfigManager.isEmpty(
@@ -131,7 +136,32 @@ fun App() {
         }
         var currentScreen by remember { mutableStateOf(Screen.Home) }
         var isSettingsOpen by remember { mutableStateOf(false) }
-        val homeScrollState = remember { androidx.compose.foundation.ScrollState(0) }
+        var settingsWindowRef by remember { mutableStateOf<ComposeWindow?>(null) }
+
+        fun openOrFocusSettings() {
+            if (isSettingsOpen) {
+                settingsWindowRef?.let { w ->
+                    try {
+                        w.isVisible = true
+                    } catch (_: Exception) {
+                    }
+                    try {
+                        w.extendedState = java.awt.Frame.NORMAL
+                    } catch (_: Exception) {
+                    }
+                    try {
+                        w.toFront()
+                    } catch (_: Exception) {
+                    }
+                    try {
+                        w.requestFocus()
+                    } catch (_: Exception) {
+                    }
+                }
+            } else {
+                isSettingsOpen = true
+            }
+        }
 
         // Settings window (separate, blank window)
         var configVersion by remember { mutableStateOf(0) }
@@ -151,7 +181,7 @@ fun App() {
 
         SettingsWindow(
             isOpen = isSettingsOpen,
-            onCloseRequest = { isSettingsOpen = false },
+            onCloseRequest = { isSettingsOpen = false; settingsWindowRef = null },
             onReloadLibraries = {
                 libraryReload()
             },
@@ -163,7 +193,8 @@ fun App() {
                 }
             },
             onThemeChanged = { newTheme -> themeName = newTheme },
-            onConfigChanged = { configVersion++ }
+            onConfigChanged = { configVersion++ },
+            onWindowCreated = { settingsWindowRef = it }
         )
 
         // Executable selection popup for ambiguous games
@@ -194,7 +225,7 @@ fun App() {
                     isLibrarySelected = currentScreen == Screen.Library,
                     onHomeClick = { currentScreen = Screen.Home },
                     onLibraryClick = { currentScreen = Screen.Library },
-                    onSettingsClick = { isSettingsOpen = true }
+                    onSettingsClick = { openOrFocusSettings() }
                 )
             }
         ) { innerPadding ->
@@ -214,9 +245,8 @@ fun App() {
                             currentScreen = Screen.Library
                         },
                         isConfigEmpty = isConfigEmpty,
-                        onOpenSettings = { isSettingsOpen = true },
-                        configVersion = configVersion,
-                        scrollState = homeScrollState
+                        onOpenSettings = { openOrFocusSettings() },
+                        configVersion = configVersion
                     )
 
                     Screen.Library -> {

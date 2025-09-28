@@ -63,9 +63,15 @@ private val AppLightColors: ColorScheme = lightColorScheme(
 
 @Composable
 fun AppTheme(themeName: String = "Default", content: @Composable () -> Unit) {
-    val scheme = when (themeName) {
+    // Try community theme first (except for built-ins)
+    val scheme: ColorScheme = when (themeName) {
         "Light" -> AppLightColors
-        else -> AppDarkColors
+        "Default" -> AppDarkColors
+        else -> {
+            val ct = ThemeManager.findByName(themeName)
+            val fromMap = ct?.styles?.toColorSchemeOrNull()
+            fromMap ?: AppDarkColors
+        }
     }
     MaterialTheme(
         colorScheme = scheme,

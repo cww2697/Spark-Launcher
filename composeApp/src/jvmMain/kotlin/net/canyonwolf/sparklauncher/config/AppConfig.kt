@@ -59,6 +59,9 @@ object ConfigManager {
         return base.resolve(APP_FOLDER)
     }
 
+    /** Public accessor for other components (e.g., ThemeManager) */
+    fun getThemesDir(): Path = getAppDataDir().resolve("themes")
+
     private fun getConfigFilePath(): Path = getAppDataDir().resolve(CONFIG_FILE_NAME)
 
     /**
