@@ -49,9 +49,9 @@ body:
     attributes:
       label: Will the game launch with the detected path?
       description: Please confirm if the game will launch with the detected path.
-      value: The game launches as expected
-    validations:
-      required: true
+      options:
+        - label: The game launches as expected.
+        required: false
 
   - type: textarea
     id: extra
