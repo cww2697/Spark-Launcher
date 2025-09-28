@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.awt.ComposeWindow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +29,7 @@ fun SettingsWindow(
     onRebuildCaches: () -> Unit,
     onThemeChanged: (String) -> Unit = {},
     onConfigChanged: () -> Unit = {},
+    onWindowCreated: (ComposeWindow) -> Unit = {},
 ) {
     if (isOpen) {
         Window(
@@ -35,6 +37,8 @@ fun SettingsWindow(
             title = "Settings",
             resizable = false,
         ) {
+            LaunchedEffect(Unit) { onWindowCreated(window) }
+
             // Load current config
             val currentConfig = remember { ConfigManager.loadOrCreateDefault() }
 
@@ -115,8 +119,22 @@ fun SettingsWindow(
             }
             val currentFormatExample = remember(dateTimeFormatPattern) { dateExampleForPattern(dateTimeFormatPattern) }
 
-            // Available themes
-            val themes = remember { listOf("Default", "Light") }
+            // Available themes; refresh when window opens
+            var themes by remember {
+                mutableStateOf(
+                    listOf(
+                        "Default",
+                        "Light"
+                    ) + net.canyonwolf.sparklauncher.ui.theme.ThemeManager.listThemeNames()
+                )
+            }
+            LaunchedEffect(isOpen) {
+                if (isOpen) {
+                    net.canyonwolf.sparklauncher.ui.theme.ThemeManager.init()
+                    themes =
+                        listOf("Default", "Light") + net.canyonwolf.sparklauncher.ui.theme.ThemeManager.listThemeNames()
+                }
+            }
             var themeMenuExpanded by remember { mutableStateOf(false) }
 
             // Using ambient MaterialTheme from the app; no additional theme wrapper here

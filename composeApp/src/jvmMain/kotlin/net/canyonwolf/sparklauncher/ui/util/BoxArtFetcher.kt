@@ -32,11 +32,11 @@ object BoxArtFetcher {
         val genres: List<String>
     )
 
-    private val imageCache = ConcurrentHashMap<String, ImageBitmap?>()
-    private val urlCache = ConcurrentHashMap<String, String?>()
+    private val imageCache = ConcurrentHashMap<String, ImageBitmap>()
+    private val urlCache = ConcurrentHashMap<String, String>()
 
     // Per-launcher in-memory metadata caches
-    private val infoCaches: java.util.EnumMap<LauncherType, ConcurrentHashMap<String, GameInfo?>> =
+    private val infoCaches: java.util.EnumMap<LauncherType, ConcurrentHashMap<String, GameInfo>> =
         java.util.EnumMap(LauncherType::class.java)
 
     // Persistent metadata cache files per launcher under caches/
@@ -81,18 +81,20 @@ object BoxArtFetcher {
             }
         } catch (_: Throwable) { /* ignore and continue to network */
         }
-        return imageCache.computeIfAbsent(gameName) {
-            val url = findImageUrl(gameName) ?: return@computeIfAbsent null
-            val bytes = downloadImageBytes(url) ?: return@computeIfAbsent null
-            try {
-                val dir = file.parent
-                if (!Files.exists(dir)) Files.createDirectories(dir)
-                Files.write(file, bytes)
-            } catch (_: Throwable) {
-            }
-            val img: BufferedImage = ImageIO.read(bytes.inputStream()) ?: return@computeIfAbsent null
-            img.toComposeImageBitmap()
+        val existing = imageCache[gameName]
+        if (existing != null) return existing
+        val url = findImageUrl(gameName) ?: return null
+        val bytes = downloadImageBytes(url) ?: return null
+        try {
+            val dir = file.parent
+            if (!Files.exists(dir)) Files.createDirectories(dir)
+            Files.write(file, bytes)
+        } catch (_: Throwable) {
         }
+        val img: BufferedImage = ImageIO.read(bytes.inputStream()) ?: return null
+        val bmp = img.toComposeImageBitmap()
+        imageCache.putIfAbsent(gameName, bmp)
+        return imageCache[gameName] ?: bmp
     }
 
     /** Prefetch and cache an image for a single game name (no-op if already cached or blank). */
@@ -143,8 +145,10 @@ object BoxArtFetcher {
             return cache[gameName]
         }
         val fetched = fetchGameInfo(gameName)
-        cache[gameName] = fetched
-        saveInfoCache(launcher)
+        if (fetched != null) {
+            cache[gameName] = fetched
+            saveInfoCache(launcher)
+        }
         return fetched
     }
 
@@ -275,12 +279,12 @@ object BoxArtFetcher {
             val cache = infoCaches[launcher] ?: return
             fun esc(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
             val entriesJson = cache.entries.joinToString(",\n") { (name, info) ->
-                val genresJson = info?.genres?.joinToString(",") { g -> "\"" + esc(g) + "\"" } ?: "[]"
-                val descJson = info?.description?.let { "\"" + esc(it) + "\"" } ?: "null"
+                val genresJson = info.genres.joinToString(",") { g -> "\"" + esc(g) + "\"" }
+                val descJson = info.description?.let { "\"" + esc(it) + "\"" } ?: "null"
                 "  {\n" +
                         "    \"name\": \"${esc(name)}\",\n" +
                         "    \"description\": $descJson,\n" +
-                        "    \"genres\": [${if (genresJson == "[]") "" else genresJson}]\n" +
+                        "    \"genres\": [${genresJson}]\n" +
                         "  }"
             }
             val json = "{\n  \"entries\": [\n$entriesJson\n  ]\n}"
@@ -327,46 +331,49 @@ object BoxArtFetcher {
     }
 
     private fun findImageUrl(gameName: String): String? {
-        return urlCache.computeIfAbsent(gameName) {
-            try {
-                val token = ensureToken() ?: return@computeIfAbsent null
-                val clientId = ConfigManager.loadOrCreateDefault().igdbClientId
-                if (clientId.isBlank()) return@computeIfAbsent null
+        val cached = urlCache[gameName]
+        if (cached != null) return cached
+        return try {
+            val token = ensureToken() ?: return null
+            val clientId = ConfigManager.loadOrCreateDefault().igdbClientId
+            if (clientId.isBlank()) return null
 
-                val normalized = gameName.lowercase().replace(Regex("[^a-z0-9 ]"), "").trim()
+            val normalized = gameName.lowercase().replace(Regex("[^a-z0-9 ]"), "").trim()
 
-                // 1) search game
-                val gameQuery = buildString {
-                    append("search \"").append(gameName.replace("\\", " ").replace("\"", " ")).append("\"; ")
-                    append("fields id,name,cover,first_release_date; ")
-                    append("where cover != null; ")
-                    if (normalized == "call of duty") {
-                        append("sort first_release_date desc; ")
-                    }
-                    append("limit 1;")
+            // 1) search game
+            val gameQuery = buildString {
+                append("search \"").append(gameName.replace("\\", " ").replace("\"", " ")).append("\"; ")
+                append("fields id,name,cover,first_release_date; ")
+                append("where cover != null; ")
+                if (normalized == "call of duty") {
+                    append("sort first_release_date desc; ")
                 }
-                val gamesJson = igdbPost("games", gameQuery, token, clientId) ?: return@computeIfAbsent null
-                val gameObj = firstJsonObject(gamesJson) ?: return@computeIfAbsent null
-                val coverId = extractNumberField(gameObj, "cover") ?: return@computeIfAbsent null
-
-                // 2) get cover image id
-                val coverQuery = "fields image_id,url; where id = $coverId; limit 1;"
-                val coversJson = igdbPost("covers", coverQuery, token, clientId) ?: return@computeIfAbsent null
-                val coverObj = firstJsonObject(coversJson) ?: return@computeIfAbsent null
-                val imageId = extractStringField(coverObj, "image_id")
-                val directUrl = extractStringField(coverObj, "url")
-
-                val url = when {
-                    !imageId.isNullOrBlank() -> "https://images.igdb.com/igdb/image/upload/t_cover_big/$imageId.jpg"
-                    !directUrl.isNullOrBlank() -> // ensure https and upgrade size to cover_big if possible
-                        directUrl.replace("//", "https://").replace("t_thumb", "t_cover_big")
-
-                    else -> null
-                }
-                url
-            } catch (_: Throwable) {
-                null
+                append("limit 1;")
             }
+            val gamesJson = igdbPost("games", gameQuery, token, clientId) ?: return null
+            val gameObj = firstJsonObject(gamesJson) ?: return null
+            val coverId = extractNumberField(gameObj, "cover") ?: return null
+
+            // 2) get cover image id
+            val coverQuery = "fields image_id,url; where id = $coverId; limit 1;"
+            val coversJson = igdbPost("covers", coverQuery, token, clientId) ?: return null
+            val coverObj = firstJsonObject(coversJson) ?: return null
+            val imageId = extractStringField(coverObj, "image_id")
+            val directUrl = extractStringField(coverObj, "url")
+
+            val url = when {
+                !imageId.isNullOrBlank() -> "https://images.igdb.com/igdb/image/upload/t_cover_big/$imageId.jpg"
+                !directUrl.isNullOrBlank() -> // ensure https and upgrade size to cover_big if possible
+                    directUrl.replace("//", "https://").replace("t_thumb", "t_cover_big")
+
+                else -> null
+            }
+            if (url != null) {
+                urlCache.putIfAbsent(gameName, url)
+            }
+            url
+        } catch (_: Throwable) {
+            null
         }
     }
 

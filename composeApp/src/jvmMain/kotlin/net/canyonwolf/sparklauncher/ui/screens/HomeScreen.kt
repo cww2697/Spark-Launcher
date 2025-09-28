@@ -49,7 +49,6 @@ fun HomeScreen(
     isConfigEmpty: Boolean = false,
     onOpenSettings: (() -> Unit)? = null,
     configVersion: Int = 0,
-    scrollState: ScrollState? = null,
 ) {
     // Observe metadata loading to recompute groups when rebuild finishes
     val metadataLoading by BoxArtFetcher.metadataLoading.collectAsState()
@@ -99,9 +98,6 @@ fun HomeScreen(
         net.canyonwolf.sparklauncher.data.HomeLayoutStore.setOrder(sectionOrder)
     }
 
-    // Drag state for reordering
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    with(density) { 280.dp.toPx() } // approx section height + spacing
 
     if ((metadataLoading || imagesPrefetching) && entries.isNotEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -114,8 +110,6 @@ fun HomeScreen(
     } else {
         // Use LazyColumn so item reorders can animate smoothly via animateItemPlacement
         val listState = rememberLazyListState()
-        rememberCoroutineScope()
-        remember { mutableStateMapOf<String, Int>() }
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
