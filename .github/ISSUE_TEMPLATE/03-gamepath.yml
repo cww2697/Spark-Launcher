@@ -1,6 +1,6 @@
 name: Game Path Submission
 description: Game Path correction for Spark Launcher indexing.
-title: "[Path Correction]: ${{ values.game_name }} - ${{ values.launcher }}"
+title: "[Path Correction]: "
 labels: [ "path correction" ]
 assignees: [ ]
 
