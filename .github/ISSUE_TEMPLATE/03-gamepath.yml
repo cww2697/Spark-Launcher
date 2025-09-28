@@ -1,0 +1,64 @@
+name: Game Path Submission
+description: Game Path correction for Spark Launcher indexing.
+title: "[Path Correction]: "
+labels: [ "path correction" ]
+assignees: [ ]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to submit a game path correction! Please fill out the sections below to help us evaluate and fix the issue faster.
+
+  - type: input
+    id: game_name
+    attributes:
+      label: Game
+      description: The name of the game needing custom path handling.
+      placeholder: e.g., The Witcher 3
+    validations:
+      required: true
+
+  - type: input
+    id: launcher
+    attributes:
+      label: Launcher
+      description: Name of the launcher/store front game is installed through.
+      placeholder: e.g., Battle.net
+    validations:
+      required: true
+
+  - type: input
+    id: detected_path
+    attributes:
+      label: Detected Path
+      description: Detected path during game indexing.
+    validations:
+      required: false
+
+  - type: input
+    id: expected_path
+    attributes:
+      label: Expected Path
+      description: Expected path for the game.
+    validations:
+      required: false
+
+  - type: checkbox
+    id: launch_game
+    attributes:
+      label: Will the game launch with the detected path?
+      description: Please confirm if the game will launch with the detected path.
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional details
+      description: Any other details that might be helpful (logs, OS info, launcher paths, etc.).
+      placeholder: You can paste images or drop files here.
+    validations:
+      required: false
+
+
