@@ -137,14 +137,8 @@ object GameIndexManager {
                         }
                         if (chosen != null) {
                             val name = gameDir.name
-                            // Special-case: For Battle.net title "Call of Duty Modern Warfare III",
-                            // use a custom protocol path to ensure proper launching via Battle.net.
-                            val exePathStr =
-                                if (launcher == LauncherType.BATTLENET && name == "Call of Duty Modern Warfare III") {
-                                    "battlenet://game/pinta"
-                                } else {
-                                    chosen.toString()
-                                }
+                            val mapped = PathMappingsManager.getPathFor(name)
+                            val exePathStr = mapped ?: chosen.toString()
                             result.add(
                                 GameEntry(
                                     launcher = launcher,
