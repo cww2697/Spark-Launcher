@@ -85,8 +85,22 @@ object GameIndexManager {
      * Force a complete rescan and overwrite the index regardless of changes.
      */
     fun rescanAndSave(config: net.canyonwolf.sparklauncher.config.AppConfig): GameIndex {
+        val existing = load()
         val scanned = scan(config)
         val updated = scanned.copy(lastUpdatedEpochSeconds = Instant.now().epochSecond)
+
+        // Determine removed games by (launcher, name) and purge their caches (images and metadata)
+        try {
+            val prevSet = existing.entries.map { it.launcher to it.name }.toSet()
+            val newSet = scanned.entries.map { it.launcher to it.name }.toSet()
+            val removed = prevSet.minus(newSet)
+            if (removed.isNotEmpty()) {
+                net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.removeAllForGames(removed)
+            }
+        } catch (_: Throwable) {
+            // Best-effort cleanup; ignore errors
+        }
+
         save(updated)
         return updated
     }
