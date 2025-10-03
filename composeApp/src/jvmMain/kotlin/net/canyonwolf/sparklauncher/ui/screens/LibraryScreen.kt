@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -536,8 +537,8 @@ fun LibraryScreen(
                                 PlayStatsCard(stats = playStats, dateTimeFormatPattern = datePattern)
                                 Spacer(Modifier.weight(1f))
                                 val sel = selected
-                                // Do not show Run Configuration for Battle.net titles
-                                if (sel != null && sel.launcher != LauncherType.BATTLENET) {
+                                // Show Run Configuration for all titles; disable options for Battle.net
+                                if (sel != null) {
                                     OutlinedButton(
                                         onClick = { showRunConfigDialog = true },
                                         modifier = Modifier.fillMaxWidth()
@@ -547,6 +548,7 @@ fun LibraryScreen(
                                     if (showRunConfigDialog) {
                                         val current = sel
                                         if (current != null) {
+                                            val disabled = current.launcher == LauncherType.BATTLENET
                                             var exeText by remember(current.dirPath) {
                                                 mutableStateOf(
                                                     ExeSelectionStore.get(current.dirPath) ?: current.exePath
@@ -565,6 +567,13 @@ fun LibraryScreen(
                                                 },
                                                 text = {
                                                     Column(modifier = Modifier.fillMaxWidth()) {
+                                                        if (disabled) {
+                                                            WarningBanner(
+                                                                message = "Editing run options is not available for Battle.net games.",
+                                                                modifier = Modifier.fillMaxWidth()
+                                                            )
+                                                            Spacer(Modifier.height(12.dp))
+                                                        }
                                                         Row(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             verticalAlignment = Alignment.CenterVertically
@@ -574,46 +583,50 @@ fun LibraryScreen(
                                                                 onValueChange = { exeText = it },
                                                                 label = { Text("Executable Path") },
                                                                 singleLine = true,
+                                                                enabled = !disabled,
                                                                 modifier = Modifier.weight(1f)
                                                             )
                                                             Spacer(Modifier.width(8.dp))
-                                                            Button(onClick = {
-                                                                try {
-                                                                    val chooser = javax.swing.JFileChooser()
-                                                                    chooser.fileSelectionMode =
-                                                                        javax.swing.JFileChooser.FILES_ONLY
-                                                                    chooser.fileFilter =
-                                                                        javax.swing.filechooser.FileNameExtensionFilter(
-                                                                            "Executable files (*.exe)",
-                                                                            "exe"
-                                                                        )
-                                                                    // Preselect to current exe or its directory
+                                                            Button(
+                                                                onClick = {
                                                                     try {
-                                                                        val currentPath = exeText
-                                                                        val currentFile =
-                                                                            if (currentPath.isNotBlank()) java.io.File(
-                                                                                currentPath
-                                                                            ) else null
-                                                                        val initialDir = when {
-                                                                            currentFile != null && currentFile.exists() && currentFile.isDirectory -> currentFile
-                                                                            currentFile != null && currentFile.exists() && currentFile.isFile -> currentFile.parentFile
-                                                                            else -> java.io.File(current.dirPath)
+                                                                        val chooser = javax.swing.JFileChooser()
+                                                                        chooser.fileSelectionMode =
+                                                                            javax.swing.JFileChooser.FILES_ONLY
+                                                                        chooser.fileFilter =
+                                                                            javax.swing.filechooser.FileNameExtensionFilter(
+                                                                                "Executable files (*.exe)",
+                                                                                "exe"
+                                                                            )
+                                                                        // Preselect to current exe or its directory
+                                                                        try {
+                                                                            val currentPath = exeText
+                                                                            val currentFile =
+                                                                                if (currentPath.isNotBlank()) java.io.File(
+                                                                                    currentPath
+                                                                                ) else null
+                                                                            val initialDir = when {
+                                                                                currentFile != null && currentFile.exists() && currentFile.isDirectory -> currentFile
+                                                                                currentFile != null && currentFile.exists() && currentFile.isFile -> currentFile.parentFile
+                                                                                else -> java.io.File(current.dirPath)
+                                                                            }
+                                                                            if (initialDir != null && initialDir.exists() && initialDir.isDirectory) {
+                                                                                chooser.currentDirectory = initialDir
+                                                                            }
+                                                                            if (currentFile != null && currentFile.exists() && currentFile.isFile) {
+                                                                                chooser.selectedFile = currentFile
+                                                                            }
+                                                                        } catch (_: Throwable) {
                                                                         }
-                                                                        if (initialDir != null && initialDir.exists() && initialDir.isDirectory) {
-                                                                            chooser.currentDirectory = initialDir
-                                                                        }
-                                                                        if (currentFile != null && currentFile.exists() && currentFile.isFile) {
-                                                                            chooser.selectedFile = currentFile
+                                                                        val ret = chooser.showOpenDialog(null)
+                                                                        if (ret == javax.swing.JFileChooser.APPROVE_OPTION) {
+                                                                            exeText = chooser.selectedFile.absolutePath
                                                                         }
                                                                     } catch (_: Throwable) {
                                                                     }
-                                                                    val ret = chooser.showOpenDialog(null)
-                                                                    if (ret == javax.swing.JFileChooser.APPROVE_OPTION) {
-                                                                        exeText = chooser.selectedFile.absolutePath
-                                                                    }
-                                                                } catch (_: Throwable) {
-                                                                }
-                                                            }) {
+                                                                },
+                                                                enabled = !disabled
+                                                            ) {
                                                                 Text("Browse…")
                                                             }
                                                         }
@@ -621,12 +634,16 @@ fun LibraryScreen(
                                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                                             Checkbox(
                                                                 checked = useArgs,
-                                                                onCheckedChange = { useArgs = it })
+                                                                onCheckedChange = { useArgs = it },
+                                                                enabled = !disabled
+                                                            )
                                                             Spacer(Modifier.width(6.dp))
                                                             Text(
                                                                 "Use Custom Launch Options",
                                                                 style = MaterialTheme.typography.labelLarge,
-                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                color = if (disabled) MaterialTheme.colorScheme.onSurface.copy(
+                                                                    alpha = 0.38f
+                                                                ) else MaterialTheme.colorScheme.onSurfaceVariant
                                                             )
                                                         }
                                                         if (useArgs) {
@@ -636,24 +653,28 @@ fun LibraryScreen(
                                                                 onValueChange = { argsText = it },
                                                                 label = { Text("Command-line arguments") },
                                                                 singleLine = false,
+                                                                enabled = !disabled,
                                                                 modifier = Modifier.fillMaxWidth()
                                                             )
                                                         }
                                                     }
                                                 },
                                                 confirmButton = {
-                                                    TextButton(onClick = {
-                                                        if (exeText.isNotBlank()) {
-                                                            ExeSelectionStore.put(current.dirPath, exeText)
-                                                        }
-                                                        if (useArgs) {
-                                                            RunArgsStore.put(current.dirPath, argsText)
-                                                        } else {
-                                                            // Clear saved args when disabled
-                                                            RunArgsStore.put(current.dirPath, "")
-                                                        }
-                                                        showRunConfigDialog = false
-                                                    }) { Text("Save") }
+                                                    TextButton(
+                                                        onClick = {
+                                                            if (exeText.isNotBlank()) {
+                                                                ExeSelectionStore.put(current.dirPath, exeText)
+                                                            }
+                                                            if (useArgs) {
+                                                                RunArgsStore.put(current.dirPath, argsText)
+                                                            } else {
+                                                                // Clear saved args when disabled
+                                                                RunArgsStore.put(current.dirPath, "")
+                                                            }
+                                                            showRunConfigDialog = false
+                                                        },
+                                                        enabled = !disabled
+                                                    ) { Text("Save") }
                                                 },
                                                 dismissButton = {
                                                     TextButton(onClick = {
@@ -965,4 +986,41 @@ private fun isProcessRunning(exePath: String): Boolean {
         // ignore
     }
     return false
+}
+
+
+@Composable
+private fun WarningBanner(message: String, modifier: Modifier = Modifier) {
+    // Theme-adaptive, semi-transparent banner that remains visible on light and dark themes.
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val bg = onSurface.copy(alpha = 0.12f)        // subtle, transparent tint
+    val border = onSurface.copy(alpha = 0.36f)    // clearer delineation
+    val content = onSurface                       // high-contrast text/icon
+
+    Surface(
+        color = bg,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(8.dp),
+        modifier = modifier
+    ) {
+        Box(
+            Modifier
+                .border(1.dp, border, RoundedCornerShape(8.dp))
+                .padding(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = content.copy(alpha = 0.9f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = message,
+                    color = content,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
 }

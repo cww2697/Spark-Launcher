@@ -35,6 +35,10 @@ fun App() {
     // Initialize community themes (ensures themes folder/template and loads available themes)
     LaunchedEffect(Unit) {
         net.canyonwolf.sparklauncher.ui.theme.ThemeManager.init()
+        // Ensure path mappings file exists and update from remote if configured
+        withContext(Dispatchers.IO) {
+            net.canyonwolf.sparklauncher.data.PathMappingsManager.initOrUpdateOnLaunch()
+        }
     }
     val isConfigEmpty by remember(appConfig) {
         mutableStateOf(
@@ -74,10 +78,8 @@ fun App() {
 
             val autoSelections = mutableListOf<Pair<String, String>>() // dirPath to exePath
             val items = idx.entries.mapNotNull { e ->
-                // Battle.net special-case: For MWIII always use battlenet protocol; do not auto-select or show popup
-                if (e.launcher == net.canyonwolf.sparklauncher.data.LauncherType.BATTLENET &&
-                    e.name.equals("Call of Duty Modern Warfare III", ignoreCase = true)
-                ) {
+                // If a custom mapping exists, do not auto-select or show popup – use mapping instead
+                if (net.canyonwolf.sparklauncher.data.PathMappingsManager.hasMapping(e.name)) {
                     return@mapNotNull null
                 }
 
