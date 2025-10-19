@@ -7,6 +7,8 @@
 A lightweight desktop game launcher built with Compose Multiplatform for JVM. SparkLauncher aggregates games from
 multiple PC stores into a single library and fetches box art from IGDB so your library looks great.
 
+🎮 Power up this project with a ⭐ — it's like giving us an extra life! 
+
 ## Installation
 While an MSI installer is provided the recommended installation is by building from source files during pre-release. 
 
