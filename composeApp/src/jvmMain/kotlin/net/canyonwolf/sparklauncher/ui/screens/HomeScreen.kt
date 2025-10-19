@@ -98,6 +98,15 @@ fun HomeScreen(
         net.canyonwolf.sparklauncher.data.HomeLayoutStore.setOrder(sectionOrder)
     }
 
+    // Always keep home_layout.json in sync with the current computed state
+    LaunchedEffect(genreGroups) {
+        // Persist only when the desired order differs from what's on disk
+        val desired = sectionOrder.toList()
+        val existing = net.canyonwolf.sparklauncher.data.HomeLayoutStore.getOrder()
+        if (existing != desired) {
+            net.canyonwolf.sparklauncher.data.HomeLayoutStore.setOrder(desired)
+        }
+    }
 
     if ((metadataLoading || imagesPrefetching) && entries.isNotEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

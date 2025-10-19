@@ -66,10 +66,14 @@ object BoxArtFetcher {
     fun getBoxArt(gameName: String): ImageBitmap? {
         if (gameName.isBlank()) return null
         imageCache[gameName]?.let { return it }
-        val file = getImageFilePath(gameName)
+
+        val newFile = getImageFilePath(gameName)
+        val legacyFile = getLegacyImageFilePath(gameName)
+
+        // Try new filename first
         try {
-            if (Files.exists(file)) {
-                val bytes = Files.readAllBytes(file)
+            if (Files.exists(newFile)) {
+                val bytes = Files.readAllBytes(newFile)
                 if (bytes.isNotEmpty()) {
                     val img: BufferedImage? = ImageIO.read(bytes.inputStream())
                     if (img != null) {
@@ -79,16 +83,45 @@ object BoxArtFetcher {
                     }
                 }
             }
+        } catch (_: Throwable) { /* ignore and continue */
+        }
+
+        // Try legacy filename and migrate
+        try {
+            if (!Files.exists(newFile) && Files.exists(legacyFile)) {
+                val bytes = Files.readAllBytes(legacyFile)
+                if (bytes.isNotEmpty()) {
+                    val img: BufferedImage? = ImageIO.read(bytes.inputStream())
+                    if (img != null) {
+                        // Ensure directory exists for new file then migrate
+                        val dir = newFile.parent
+                        if (!Files.exists(dir)) Files.createDirectories(dir)
+                        try {
+                            Files.move(legacyFile, newFile)
+                        } catch (_: Throwable) {
+                            // If move fails (e.g., cross-device), attempt to write bytes
+                            try {
+                                Files.write(newFile, bytes)
+                            } catch (_: Throwable) {
+                            }
+                        }
+                        val bmp = img.toComposeImageBitmap()
+                        imageCache[gameName] = bmp
+                        return bmp
+                    }
+                }
+            }
         } catch (_: Throwable) { /* ignore and continue to network */
         }
+
         val existing = imageCache[gameName]
         if (existing != null) return existing
         val url = findImageUrl(gameName) ?: return null
         val bytes = downloadImageBytes(url) ?: return null
         try {
-            val dir = file.parent
+            val dir = newFile.parent
             if (!Files.exists(dir)) Files.createDirectories(dir)
-            Files.write(file, bytes)
+            Files.write(newFile, bytes)
         } catch (_: Throwable) {
         }
         val img: BufferedImage = ImageIO.read(bytes.inputStream()) ?: return null
@@ -199,8 +232,24 @@ object BoxArtFetcher {
         }
     }
 
+    private fun sanitizeForFilename(name: String): String {
+        return try {
+            val lower = name.lowercase().trim()
+            val replaced = lower.replace(Regex("[^a-z0-9]+"), "_")
+            val collapsed = replaced.replace(Regex("_+"), "_").trim('_')
+            if (collapsed.isBlank()) "art_" + sha1Hex(lower) else collapsed
+        } catch (_: Throwable) {
+            "art_" + sha1Hex(name.lowercase())
+        }
+    }
+
     private fun getImageFilePath(gameName: String): Path =
+        getImagesDir().resolve("${sanitizeForFilename(gameName)}_box_art.jpg")
+
+    // Legacy hashed filename used in previous versions; kept for backward compatibility/migration
+    private fun getLegacyImageFilePath(gameName: String): Path =
         getImagesDir().resolve("art_" + sha1Hex(gameName.lowercase()) + ".jpg")
+
     private fun getMetadataFilePath(launcher: LauncherType): Path =
         getCachesDir().resolve(METADATA_FILE_PREFIX + launcher.name.lowercase() + METADATA_FILE_SUFFIX)
 
@@ -597,6 +646,42 @@ object BoxArtFetcher {
             null
         }
     }
+
+    // --- Cache cleanup helpers for removed games ---
+    fun removeCachesFor(launcher: LauncherType, gameName: String) {
+        if (gameName.isBlank()) return
+        try {
+            // Remove in-memory caches
+            imageCache.remove(gameName)
+            urlCache.remove(gameName)
+            // Remove image files (new and legacy names)
+            try {
+                Files.deleteIfExists(getImageFilePath(gameName))
+            } catch (_: Throwable) {
+            }
+            try {
+                Files.deleteIfExists(getLegacyImageFilePath(gameName))
+            } catch (_: Throwable) {
+            }
+        } catch (_: Throwable) {
+        }
+        try {
+            // Remove metadata entry and persist
+            ensureInfoCacheLoaded(launcher)
+            val cache = infoCaches.getOrPut(launcher) { ConcurrentHashMap() }
+            if (cache.remove(gameName) != null) {
+                saveInfoCache(launcher)
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    fun removeAllForGames(removed: Collection<Pair<LauncherType, String>>) {
+        if (removed.isEmpty()) return
+        removed.forEach { (launcher, name) ->
+            removeCachesFor(launcher, name)
+        }
+    }
 }
 
 private fun InputStream.readAllBytesCompat(): ByteArray {
@@ -616,3 +701,4 @@ private fun InputStream.readAllBytesCompat(): ByteArray {
 }
 
 private fun ByteArray.inputStream(): InputStream = java.io.ByteArrayInputStream(this)
+
