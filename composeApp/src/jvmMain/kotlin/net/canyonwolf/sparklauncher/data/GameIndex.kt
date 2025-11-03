@@ -85,8 +85,22 @@ object GameIndexManager {
      * Force a complete rescan and overwrite the index regardless of changes.
      */
     fun rescanAndSave(config: net.canyonwolf.sparklauncher.config.AppConfig): GameIndex {
+        val existing = load()
         val scanned = scan(config)
         val updated = scanned.copy(lastUpdatedEpochSeconds = Instant.now().epochSecond)
+
+        // Determine removed games by (launcher, name) and purge their caches (images and metadata)
+        try {
+            val prevSet = existing.entries.map { it.launcher to it.name }.toSet()
+            val newSet = scanned.entries.map { it.launcher to it.name }.toSet()
+            val removed = prevSet.minus(newSet)
+            if (removed.isNotEmpty()) {
+                net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher.removeAllForGames(removed)
+            }
+        } catch (_: Throwable) {
+            // Best-effort cleanup; ignore errors
+        }
+
         save(updated)
         return updated
     }
@@ -137,14 +151,8 @@ object GameIndexManager {
                         }
                         if (chosen != null) {
                             val name = gameDir.name
-                            // Special-case: For Battle.net title "Call of Duty Modern Warfare III",
-                            // use a custom protocol path to ensure proper launching via Battle.net.
-                            val exePathStr =
-                                if (launcher == LauncherType.BATTLENET && name == "Call of Duty Modern Warfare III") {
-                                    "battlenet://game/pinta"
-                                } else {
-                                    chosen.toString()
-                                }
+                            val mapped = PathMappingsManager.getPathFor(name)
+                            val exePathStr = mapped ?: chosen.toString()
                             result.add(
                                 GameEntry(
                                     launcher = launcher,

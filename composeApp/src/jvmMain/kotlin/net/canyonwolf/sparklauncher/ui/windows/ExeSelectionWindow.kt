@@ -10,10 +10,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import net.canyonwolf.sparklauncher.data.ExeSelectionStore
+import java.awt.FileDialog
+import java.awt.Frame
+import java.io.File
+import java.io.FilenameFilter
 
 /**
- * A non-resizable popup window listing games that have multiple .exe candidates.
- * Each section displays the game name and a numbered list of candidate executables.
+ * A non-resizable popup window for resolving games needing an executable selection.
+ * Instead of listing detected candidates, provides a file selector to browse and pick the correct .exe.
  * Selecting an item will persist the selection immediately via ExeSelectionStore and
  * invoke onSelection(dirPath, exePath).
  */
@@ -33,7 +37,7 @@ fun ExeSelectionWindow(
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                 Text(
-                    "Multiple executables detected. Please choose the correct one for each game:",
+                    "Some games need help locating the correct executable. Please browse to select the .exe for each game:",
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Spacer(Modifier.height(12.dp))
@@ -59,17 +63,36 @@ private fun GameChoiceCard(item: ExeChoiceItem, onSelection: (String) -> Unit) {
         Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
             Text(item.gameName, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
             Spacer(Modifier.height(8.dp))
-            item.candidates.forEachIndexed { idx, exe ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("${idx + 1}. ${exe}", style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { onSelection(exe) }) {
-                        Text("Select")
+            Text("Game folder: ${item.dirPath}", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    "Select the executable (.exe) using the file chooser.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                TextButton(onClick = {
+                    val startDir = File(item.dirPath)
+                    val dirToUse = (startDir.takeIf { it.exists() } ?: startDir.parentFile)
+                        ?: File(System.getProperty("user.home"))
+                    val dialog = FileDialog(null as Frame?, "Choose executable for ${item.gameName}", FileDialog.LOAD)
+                    dialog.directory = dirToUse.absolutePath
+                    dialog.filenameFilter = FilenameFilter { _, name -> name.endsWith(".exe", ignoreCase = true) }
+                    try {
+                        dialog.isVisible = true
+                    } catch (_: Exception) {
+                        dialog.show()
                     }
+                    val file = dialog.file
+                    val dir = dialog.directory
+                    if (!file.isNullOrBlank() && !dir.isNullOrBlank()) {
+                        val chosen = File(dir, file).absolutePath
+                        if (chosen.endsWith(".exe", ignoreCase = true)) {
+                            onSelection(chosen)
+                        }
+                    }
+                }) {
+                    Text("Browse…")
                 }
-                if (idx != item.candidates.lastIndex) Divider(modifier = Modifier.padding(vertical = 6.dp))
             }
         }
     }
