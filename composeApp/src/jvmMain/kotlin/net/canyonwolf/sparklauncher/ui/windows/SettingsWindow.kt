@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import net.canyonwolf.sparklauncher.config.AppConfig
 import net.canyonwolf.sparklauncher.config.ConfigManager
+import net.canyonwolf.sparklauncher.ui.theme.liquidGlass
 import java.awt.Desktop
 import java.net.URI
 import javax.swing.JFileChooser
@@ -511,10 +512,11 @@ fun SettingsWindow(
 @Composable
 private fun SectionCard(content: @Composable () -> Unit) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.liquidGlass(),
+        color = androidx.compose.ui.graphics.Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        tonalElevation = 2.dp,
-        shadowElevation = 2.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         shape = MaterialTheme.shapes.medium
     ) {
         content()

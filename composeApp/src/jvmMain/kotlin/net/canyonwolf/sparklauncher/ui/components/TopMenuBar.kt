@@ -1,6 +1,7 @@
 package net.canyonwolf.sparklauncher.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -10,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -41,15 +43,20 @@ fun TopMenuBar(
                 fun MenuItem(label: String, selected: Boolean, onClick: () -> Unit) {
                     val interaction = remember { MutableInteractionSource() }
                     var hovered by remember { mutableStateOf(false) }
-                    val bgColor =
-                        if (hovered) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f) else androidx.compose.ui.graphics.Color.Transparent
+                    val bgColor = when {
+                        hovered -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                        selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
+                    }
                     val textColor = if (selected) activeTextColor else inactiveTextColor
+                    val borderColor = if (selected) activeTextColor.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.1f)
 
                     Box(
                         modifier = Modifier
                             .defaultMinSize(minHeight = 0.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(6.dp))
                             .background(bgColor)
+                            .border(1.dp, borderColor, RoundedCornerShape(6.dp))
                             .onPointerEvent(PointerEventType.Enter) { hovered = true }
                             .onPointerEvent(PointerEventType.Exit) { hovered = false }
                             .pointerHoverIcon(PointerIcon.Hand)
@@ -59,9 +66,9 @@ fun TopMenuBar(
                                 role = Role.Button,
                                 onClick = onClick
                             )
-                            .padding(horizontal = 8.dp, vertical = twoPx)
+                            .padding(horizontal = 12.dp, vertical = twoPx + 2.dp)
                     ) {
-                        Text(label, color = textColor)
+                        Text(label, color = textColor, style = MaterialTheme.typography.labelLarge)
                     }
                 }
 
@@ -75,7 +82,7 @@ fun TopMenuBar(
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
             titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
         actions = {}

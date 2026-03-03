@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.canyonwolf.sparklauncher.data.*
+import net.canyonwolf.sparklauncher.ui.theme.liquidGlass
 import net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher
 
 @Composable
@@ -221,7 +222,12 @@ fun LibraryScreen(
 
     Row(Modifier.fillMaxSize()) {
         // Left navigation list
-        Surface(tonalElevation = 1.dp, modifier = Modifier.width(300.dp).fillMaxHeight()) {
+        Surface(
+            tonalElevation = 0.dp,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
+            modifier = Modifier.width(300.dp).fillMaxHeight()
+                .border(1.dp, Color.White.copy(alpha = 0.1f), androidx.compose.ui.graphics.RectangleShape)
+        ) {
             // Compute favorites shown set based on current filter
             val favEntries = entries.filter { favorites.contains(it.dirPath) }
             val favShown = if (searchQuery.isBlank()) favEntries else favEntries.filter {
@@ -246,8 +252,8 @@ fun LibraryScreen(
                                 .fillMaxWidth()
                                 .height(28.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.3f))
                                 .padding(horizontal = 8.dp, vertical = 6.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -427,8 +433,9 @@ fun LibraryScreen(
                 Surface(
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp,
-                    color = MaterialTheme.colorScheme.surface,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
                     modifier = Modifier.fillMaxWidth().weight(2f)
+                        .liquidGlass(shape = androidx.compose.ui.graphics.RectangleShape)
                 ) {
                     val detailsScroll = rememberScrollState()
                     if (selected == null) {
