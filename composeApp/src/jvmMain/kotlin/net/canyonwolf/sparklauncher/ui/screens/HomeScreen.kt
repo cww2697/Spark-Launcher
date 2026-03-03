@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import net.canyonwolf.sparklauncher.data.GameEntry
 import net.canyonwolf.sparklauncher.data.LauncherType
+import net.canyonwolf.sparklauncher.ui.theme.liquidGlass
 import net.canyonwolf.sparklauncher.ui.util.BoxArtFetcher
 
 private fun estimateItemSpanPx(state: LazyListState): Float {
@@ -347,14 +348,16 @@ private fun GameCarouselCard(entry: GameEntry, onClick: () -> Unit) {
     val cardHeight = 240.dp
 
     Surface(
-        tonalElevation = 3.dp,
-        shadowElevation = 6.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         shape = MaterialTheme.shapes.medium,
+        color = androidx.compose.ui.graphics.Color.Transparent,
         modifier = Modifier
             .size(cardWidth, cardHeight)
+            .liquidGlass()
             .clickable(onClick = onClick)
     ) {
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)) {
+        Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Transparent)) {
             when {
                 image != null -> {
                     Image(
@@ -386,10 +389,10 @@ private fun GameCarouselCard(entry: GameEntry, onClick: () -> Unit) {
             ) {
                 Surface(
                     shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
                     contentColor = MaterialTheme.colorScheme.onSurface,
-                    tonalElevation = 1.dp,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+                    tonalElevation = 0.dp,
+                    border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.15f))
                 ) {
                     EllipsizedTextWithHover(
                         text = entry.name,

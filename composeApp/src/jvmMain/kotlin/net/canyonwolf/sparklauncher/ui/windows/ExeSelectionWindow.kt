@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import net.canyonwolf.sparklauncher.ui.theme.liquidGlass
 import net.canyonwolf.sparklauncher.data.ExeSelectionStore
 
 /**
@@ -37,7 +38,7 @@ fun ExeSelectionWindow(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Spacer(Modifier.height(12.dp))
-                Divider()
+                HorizontalDivider(thickness = 1.dp, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.1f))
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(items) { item ->
@@ -55,7 +56,11 @@ fun ExeSelectionWindow(
 
 @Composable
 private fun GameChoiceCard(item: ExeChoiceItem, onSelection: (String) -> Unit) {
-    Card {
+    Surface(
+        modifier = Modifier.fillMaxWidth().liquidGlass(),
+        color = androidx.compose.ui.graphics.Color.Transparent,
+        shape = MaterialTheme.shapes.medium
+    ) {
         Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
             Text(item.gameName, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
             Spacer(Modifier.height(8.dp))
@@ -64,12 +69,17 @@ private fun GameChoiceCard(item: ExeChoiceItem, onSelection: (String) -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("${idx + 1}. ${exe}", style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { onSelection(exe) }) {
-                        Text("Select")
+                    Text("${idx + 1}. ${exe}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = { onSelection(exe) },
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                    ) {
+                        Text("Select", style = MaterialTheme.typography.labelMedium)
                     }
                 }
-                if (idx != item.candidates.lastIndex) Divider(modifier = Modifier.padding(vertical = 6.dp))
+                if (idx != item.candidates.lastIndex) HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), thickness = 1.dp, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.1f))
             }
         }
     }

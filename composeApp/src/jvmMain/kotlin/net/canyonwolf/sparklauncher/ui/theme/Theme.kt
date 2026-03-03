@@ -1,11 +1,17 @@
 package net.canyonwolf.sparklauncher.ui.theme
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 // Accent and base colors
 private val NeonYellow = Color(0xFFCCFF00) // bright neon yellow-green (accent)
@@ -44,37 +50,75 @@ private val OnLight = Color(0xFF222222)
 private val OnLightVariant = Color(0xFF2E2E2E)
 
 private val AppLightColors: ColorScheme = lightColorScheme(
-    primary = Color(0xFFB59F00), // deeper yellow for contrast on light
-    onPrimary = Color(0xFF1B1B1B),
-    secondary = NeonYellow,
-    onSecondary = Color(0xFF1B1B1B),
-    tertiary = Color(0xFFFFD54F),
-    onTertiary = Color(0xFF1B1B1B),
+    primary = Color(0xFF00B8D4), // adjusted Cyan for light mode
+    onPrimary = Color.White,
+    secondary = Color(0xFF00B8D4),
+    onSecondary = Color.White,
+    tertiary = Color(0xFF64DD17),
+    onTertiary = Color.White,
 
-    background = LightBackground,
-    onBackground = OnLight,
+    background = Color(0xFFF1F5F9),
+    onBackground = Color(0xFF0F172A),
 
-    surface = LightSurface,
-    onSurface = OnLight,
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF1E293B),
 
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = OnLightVariant,
+    surfaceVariant = Color(0xFFE2E8F0),
+    onSurfaceVariant = Color(0xFF475569),
+    outline = Color(0xFFCBD5E1),
+    outlineVariant = Color(0xFFF1F5F9)
 )
 
 @Composable
 fun AppTheme(themeName: String = "Default", content: @Composable () -> Unit) {
-    // Try community theme first (except for built-ins)
-    val scheme: ColorScheme = when (themeName) {
-        "Light" -> AppLightColors
-        "Default" -> AppDarkColors
-        else -> {
-            val ct = ThemeManager.findByName(themeName)
-            val fromMap = ct?.styles?.toColorSchemeOrNull()
-            fromMap ?: AppDarkColors
-        }
-    }
+    // Liquid Glass is now the base for all themes
+    val isLight = themeName == "Light"
+    val scheme: ColorScheme = if (isLight) AppLightColors else AppLiquidGlassColors
+    
     MaterialTheme(
         colorScheme = scheme,
+        shapes = LiquidGlassShapes,
         content = content
     )
 }
+
+private val LiquidGlassShapes = androidx.compose.material3.Shapes(
+    extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+    small = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+    medium = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+    large = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+    extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
+)
+
+private val AppLiquidGlassColors: ColorScheme = darkColorScheme(
+    primary = Color(0xFF00E5FF),
+    onPrimary = Color(0xFF001A1A),
+    secondary = Color(0xFF00E5FF),
+    onSecondary = Color(0xFF001A1A),
+    tertiary = Color(0xFF76FF03),
+    onTertiary = Color(0xFF0A1A00),
+
+    background = Color(0xFF0F172A),
+    onBackground = Color(0xFFE2E8F0),
+
+    surface = Color(0xFF1E293B),
+    onSurface = Color(0xFFF1F5F9),
+
+    surfaceVariant = Color(0xFF334155),
+    onSurfaceVariant = Color(0xFFCBD5E1),
+    outline = Color(0xFF475569),
+    outlineVariant = Color(0xFF1E293B)
+)
+
+@Composable
+fun Modifier.liquidGlass(
+    color: Color = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
+    borderColor: Color = Color.White.copy(alpha = 0.15f),
+    shape: androidx.compose.ui.graphics.Shape = MaterialTheme.shapes.medium,
+    borderWidth: Dp = 1.dp
+): Modifier = this.then(
+    Modifier
+        .clip(shape)
+        .background(color)
+        .border(borderWidth, borderColor, shape)
+)
